@@ -14,10 +14,18 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- STATE ---
+// --- STATE MANAGEMENT ---
 const USER_ID = "chirkut_user_001";
-const getTodayStr = () => new Date().toISOString().split('T')[0];
-const docRef = doc(db, "users", USER_ID, "dailyLogs", getTodayStr());
+
+// FIX 1: Use Local Time (YYYY-MM-DD) instead of UTC
+// 'en-CA' always outputs YYYY-MM-DD format in local timezone
+const getTodayStr = () => new Date().toLocaleDateString('en-CA');
+
+// FIX 2: Dynamic Doc Reference (Always gets CURRENT day, not load day)
+const getDocRef = () => doc(db, "users", USER_ID, "dailyLogs", getTodayStr());
+
+// Track current date to detect midnight switch
+let lastLoadedDate = getTodayStr();
 
 // --- DOM ELEMENTS ---
 const appContainer = document.getElementById('app-container');
@@ -60,6 +68,7 @@ window.addEventListener('load', async () => {
         navigator.serviceWorker.register('./sw.js');
     }
 
+    // Set UI Date
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
 
@@ -72,8 +81,8 @@ window.addEventListener('load', async () => {
         appContainer.classList.remove('hidden');
     }, 1500);
 
-    // Background Checks
-    setInterval(checkReminders, 60000);
+    // Background Loop (Checks reminders AND midnight reset)
+    setInterval(backgroundLoop, 60000);
 });
 
 function startAffirmations() {
@@ -91,17 +100,28 @@ function startAffirmations() {
 // --- DATA LOGIC ---
 async function loadTodayData() {
     try {
-        const snap = await getDoc(docRef);
+        // ALWAYS use getDocRef() function to get fresh date
+        const snap = await getDoc(getDocRef());
+        
         if (snap.exists()) {
             updateUI(snap.data());
         } else {
+            // It's a new day (or first time)! Create fresh doc.
             const initialData = {
-                waterCount: 0, lastWaterTime: Date.now(), medTaken: false, sleepHours: 0,
-                date: getTodayStr(), timestamp: Date.now()
+                waterCount: 0, 
+                lastWaterTime: Date.now(), 
+                medTaken: false, 
+                sleepHours: 0,
+                date: getTodayStr(), 
+                timestamp: Date.now()
             };
-            await setDoc(docRef, initialData);
-            updateUI(initialData);
+            await setDoc(getDocRef(), initialData);
+            updateUI(initialData); // UI will reset to 0 here
         }
+        
+        // Update our tracker
+        lastLoadedDate = getTodayStr();
+        
     } catch (e) {
         console.error(e);
         affirmationText.innerText = "Offline Mode (Check Console)";
@@ -110,17 +130,36 @@ async function loadTodayData() {
 
 function updateUI(data) {
     lblWaterCount.innerText = `${data.waterCount || 0} cups`;
+    
+    // Water Time
     if (data.lastWaterTime) {
         const d = new Date(data.lastWaterTime);
         lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
+    } else {
+        lblWaterTime.innerText = "No water yet";
     }
+
+    // Meds
     if (data.medTaken) {
-        btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
+        btnMed.innerText = "Taken ✔"; 
+        btnMed.classList.add('taken'); 
+        btnMed.disabled = true;
         lblMed.innerText = "Good job! 💙";
+    } else {
+        // Reset UI for new day
+        btnMed.innerText = "Mark Taken"; 
+        btnMed.classList.remove('taken'); 
+        btnMed.disabled = false;
+        lblMed.innerText = "Not taken";
     }
+
+    // Sleep
     if (data.sleepHours) {
         inpSleep.value = data.sleepHours;
         lblSleep.innerText = "Saved ✔";
+    } else {
+        inpSleep.value = "";
+        lblSleep.innerText = "Log hours";
     }
 }
 
@@ -131,7 +170,8 @@ btnWater.addEventListener('click', async () => {
     count++;
     lblWaterCount.innerText = `${count} cups`;
     
-    await updateDoc(docRef, { waterCount: count, lastWaterTime: now });
+    await updateDoc(getDocRef(), { waterCount: count, lastWaterTime: now });
+    
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
     
@@ -141,8 +181,8 @@ btnWater.addEventListener('click', async () => {
 btnMed.addEventListener('click', async () => {
     btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
     lblMed.innerText = "Good job! 💙";
-    await updateDoc(docRef, { medTaken: true });
     
+    await updateDoc(getDocRef(), { medTaken: true });
     markActiveToday();
 });
 
@@ -150,9 +190,9 @@ btnSleep.addEventListener('click', async () => {
     const h = parseFloat(inpSleep.value);
     if (!h) return;
     lblSleep.innerText = "Saving...";
-    await updateDoc(docRef, { sleepHours: h });
-    lblSleep.innerText = "Saved ✔";
     
+    await updateDoc(getDocRef(), { sleepHours: h });
+    lblSleep.innerText = "Saved ✔";
     markActiveToday();
 });
 
@@ -171,9 +211,10 @@ async function checkStreak() {
         lastActive = data.lastActiveDate;
     }
 
-    const yesterday = new Date();
-    yesterday.setDate(yesterday.getDate() - 1);
-    const yesterdayStr = yesterday.toISOString().split('T')[0];
+    // Calculate Yesterday Correctly
+    const d = new Date();
+    d.setDate(d.getDate() - 1);
+    const yesterdayStr = d.toLocaleDateString('en-CA');
 
     if (lastActive === today) updateStreakUI(streak, true);
     else if (lastActive === yesterdayStr) updateStreakUI(streak, false);
@@ -219,7 +260,7 @@ async function markActiveToday() {
     }
 }
 
-// --- HISTORY & DELETE (Corrected) ---
+// --- HISTORY & DELETE ---
 btnHistory.addEventListener('click', async () => {
     modalHistory.classList.remove('hidden');
     await renderHistoryList();
@@ -257,8 +298,6 @@ async function renderHistoryList() {
                 </div>
                 <button class="btn-delete" style="border:none; background:none; font-size:1.2rem;">🗑️</button>
             `;
-            
-            // Attach event listener directly to element
             div.querySelector('.btn-delete').addEventListener('click', () => deleteEntry(d.date));
             historyList.appendChild(div);
         });
@@ -270,13 +309,24 @@ async function renderHistoryList() {
 async function deleteEntry(dateStr) {
     if(!confirm("Delete this?")) return;
     await deleteDoc(doc(db, "users", USER_ID, "dailyLogs", dateStr));
-    await renderHistoryList(); // Refresh without reloading page
+    await renderHistoryList(); 
 }
 
-// --- NOTIFICATIONS ---
-async function checkReminders() {
+// --- BACKGROUND LOOP (Notifications & Midnight Reset) ---
+async function backgroundLoop() {
+    // 1. MIDNIGHT CHECK: Has the day changed since we loaded?
+    const currentDay = getTodayStr();
+    if (currentDay !== lastLoadedDate) {
+        console.log("Midnight detected! Resetting UI...");
+        dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        await loadTodayData(); // This loads the NEW doc (empty) and resets UI
+        return; // Skip notifications this exact second
+    }
+
+    // 2. NOTIFICATIONS
     if (Notification.permission !== "granted") return;
-    const snap = await getDoc(docRef);
+    
+    const snap = await getDoc(getDocRef());
     if (!snap.exists()) return;
     
     const data = snap.data();
@@ -286,9 +336,10 @@ async function checkReminders() {
     // Water (2 Hours)
     if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
         sendNotification("Kiddo, have some water! 💧", "You haven't drunk water in the past 2 hrs. Hydrate now!");
-        await updateDoc(docRef, { lastWaterTime: now }); 
+        await updateDoc(getDocRef(), { lastWaterTime: now }); 
     }
-    // Meds (10 PM)
+    
+    // Meds (10 PM / 22:00)
     if (currentHour === 22 && !data.medTaken) {
         const todayStr = getTodayStr();
         if (localStorage.getItem('med_notif') !== todayStr) {
@@ -296,7 +347,8 @@ async function checkReminders() {
             localStorage.setItem('med_notif', todayStr);
         }
     }
-    // Sleep (11 PM)
+    
+    // Sleep (11 PM / 23:00)
     if (currentHour === 23 && !data.sleepHours) {
         const todayStr = getTodayStr();
         if (localStorage.getItem('sleep_notif') !== todayStr) {
@@ -337,4 +389,3 @@ btnInstall.addEventListener('click', async () => {
 window.addEventListener('appinstalled', () => {
     btnInstall.classList.add('hidden');
 });
-
