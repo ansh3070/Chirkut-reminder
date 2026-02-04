@@ -2,53 +2,90 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Chirkut Reminder 💙</title>
     <link rel="stylesheet" href="styles.css">
-    <meta name="theme-color" content="#e3f2fd">
+    <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
+    <meta name="theme-color" content="#fff0f3">
 </head>
 <body>
 
     <div id="loading-screen">
         <div class="loader-content">
-            <div class="heart">💙</div>
-            <p>Loading love...</p>
+            <div class="heart-pulse">💙</div>
+            <p>Loading your safe space...</p>
         </div>
     </div>
 
-    <main id="app-content" class="hidden">
+    <div id="app-container" class="hidden">
         
-        <section class="affirmation-box">
-            <h2 id="affirmation-text">You are enough, exactly as you are.</h2>
-        </section>
+        <nav class="navbar">
+            <span class="logo">Chirkut Reminder</span>
+            <span class="date-badge" id="display-date">Today</span>
+        </nav>
 
-        <section class="card water-card">
-            <div class="icon">💧</div>
-            <h3>Hydration</h3>
-            <p id="water-status">Last sip: Just now</p>
-            <button id="btn-water" class="btn-primary">I drank water</button>
-        </section>
+        <div class="affirmation-banner">
+            <p id="affirmation-text">You are doing great.</p>
+        </div>
 
-        <section class="card sleep-card">
-            <div class="icon">🌙</div>
-            <h3>Sleep Log</h3>
-            <div class="input-group">
-                <input type="number" id="sleep-input" placeholder="Hours (e.g., 7.5)" step="0.5" min="0" max="24">
-                <button id="btn-sleep" class="btn-secondary">Save</button>
+        <main class="dashboard-grid">
+            
+            <div class="card water-card">
+                <div class="card-header">
+                    <span class="emoji">💧</span>
+                    <span class="stat" id="water-count">0 cups</span>
+                </div>
+                <h3>Hydration</h3>
+                <p class="subtext" id="water-last-time">No water yet</p>
+                <button id="btn-water" class="btn-action water-btn">
+                    I drank water
+                </button>
             </div>
-            <p id="sleep-msg" class="status-msg"></p>
-        </section>
 
-        <section class="card med-card">
-            <div class="icon">💊</div>
-            <h3>Medicine</h3>
-            <p id="med-status">Not taken yet today</p>
-            <button id="btn-med" class="btn-outline">I took my medicine today</button>
-        </section>
+            <div class="card med-card">
+                <div class="card-header">
+                    <span class="emoji">💊</span>
+                </div>
+                <h3>Meds</h3>
+                <p class="subtext" id="med-status">Not taken</p>
+                <button id="btn-med" class="btn-action med-btn">
+                    Mark Taken
+                </button>
+            </div>
 
-    </main>
+            <div class="card sleep-card">
+                <div class="card-header">
+                    <span class="emoji">😴</span>
+                </div>
+                <h3>Sleep</h3>
+                <div class="sleep-input-wrapper">
+                    <input type="number" id="sleep-input" placeholder="Hrs" step="0.5">
+                    <button id="btn-sleep" class="btn-mini">💾</button>
+                </div>
+                <p class="subtext" id="sleep-status">Log hours</p>
+            </div>
+
+        </main>
+
+        <footer class="bottom-controls">
+            <button id="btn-history" class="btn-text">📜 View History</button>
+            <button id="btn-test-notif" class="btn-text-sub">🔔 Test Notify</button>
+        </footer>
+
+    </div>
+
+    <div id="history-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2>Past Care Logs</h2>
+                <button id="close-history" class="close-btn">&times;</button>
+            </div>
+            <div id="history-list" class="history-list">
+                <p class="loading-text">Loading history...</p>
+            </div>
+        </div>
+    </div>
 
     <script type="module" src="app.js"></script>
 </body>
 </html>
-
