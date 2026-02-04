@@ -38,43 +38,38 @@ const closeHistory = document.getElementById('close-history');
 const historyList = document.getElementById('history-list');
 const btnTestNotif = document.getElementById('btn-test-notif');
 
-// --- 1. NEW MOTIVATIONAL AFFIRMATIONS ---
+// --- AFFIRMATIONS ---
 const affirmations = [
     "Your brain needs water to think clearly. Sip sip! 💧",
     "Meds are a form of self-love, not a chore. 💊",
     "Good sleep tonight means a better tomorrow. 🌙",
     "Hydration is the key to glowing energy. ✨",
     "You deserve to feel healthy and rested.",
-    "Small steps: One cup, one pill, one nap.",
     "Be gentle with yourself today 💙"
 ];
 
 // --- INITIALIZATION ---
 window.addEventListener('load', async () => {
-    // Register Service Worker
+    // 1. Service Worker
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js')
-            .then(reg => console.log("SW Registered"))
-            .catch(err => console.log("SW Fail", err));
+        navigator.serviceWorker.register('./sw.js');
     }
 
-    // Check Notification Permission on load
-    if (Notification.permission !== "granted") {
-        console.log("Permission state:", Notification.permission);
-    }
-
-    // Setup UI
+    // 2. Setup UI
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
 
-    // Load Data
+    // 3. Load Data
     await loadTodayData();
 
-    // Show App
+    // 4. Reveal App
     setTimeout(() => {
         loadingScreen.style.display = 'none';
         appContainer.classList.remove('hidden');
     }, 1500);
+
+    // 5. START AUTOMATIC CHECKS (Every 1 minute)
+    setInterval(checkReminders, 60000);
 });
 
 function startAffirmations() {
@@ -86,7 +81,7 @@ function startAffirmations() {
             affirmationText.innerText = affirmations[i];
             affirmationText.style.opacity = 1;
         }, 500);
-    }, 15000); // Change every 15s
+    }, 15000);
 }
 
 // --- DATA LOGIC ---
@@ -97,7 +92,7 @@ async function loadTodayData() {
             updateUI(snap.data());
         } else {
             const initialData = {
-                waterCount: 0, lastWaterTime: null, medTaken: false, sleepHours: 0,
+                waterCount: 0, lastWaterTime: Date.now(), medTaken: false, sleepHours: 0,
                 date: getTodayStr(), timestamp: Date.now()
             };
             await setDoc(docRef, initialData);
@@ -105,7 +100,7 @@ async function loadTodayData() {
         }
     } catch (e) {
         console.error(e);
-        affirmationText.innerText = "Error: Check Console";
+        affirmationText.innerText = "Offline Mode (Check Console)";
     }
 }
 
@@ -131,7 +126,11 @@ btnWater.addEventListener('click', async () => {
     let count = parseInt(lblWaterCount.innerText) || 0;
     count++;
     lblWaterCount.innerText = `${count} cups`;
+    
+    // Save to DB
     await updateDoc(docRef, { waterCount: count, lastWaterTime: now });
+    
+    // Update UI Time
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 });
@@ -150,7 +149,7 @@ btnSleep.addEventListener('click', async () => {
     lblSleep.innerText = "Saved ✔";
 });
 
-// --- HISTORY ---
+// --- HISTORY LOGIC ---
 btnHistory.addEventListener('click', async () => {
     modalHistory.classList.remove('hidden');
     historyList.innerHTML = '<p style="text-align:center;">Loading...</p>';
@@ -191,50 +190,76 @@ closeHistory.addEventListener('click', () => modalHistory.classList.add('hidden'
 async function deleteEntry(dateStr) {
     if(!confirm("Delete this?")) return;
     await deleteDoc(doc(db, "users", USER_ID, "dailyLogs", dateStr));
-    btnHistory.click(); // Reload
+    btnHistory.click();
 }
 
-// --- 2. NOTIFICATION FIX WITH DEBUGGER ---
-btnTestNotif.addEventListener('click', () => {
-    // Step 1: Check if browser supports it
-    if (!("Notification" in window)) {
-        alert("This browser does not support notifications.");
-        return;
+// --- AUTOMATIC NOTIFICATIONS ---
+async function checkReminders() {
+    if (Notification.permission !== "granted") return;
+
+    const snap = await getDoc(docRef);
+    if (!snap.exists()) return;
+    
+    const data = snap.data();
+    const now = Date.now();
+    const currentHour = new Date().getHours();
+
+    // 1. WATER CHECK (2 Hours = 7200000 ms)
+    // We verify if data.lastWaterTime exists to avoid error on fresh start
+    if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
+        sendNotification("Kiddo, have some water! 💧", "You haven't drunk water in the past 2 hrs. Hydrate now!");
+        
+        // Update lastWaterTime so we don't spam every minute.
+        // We cheat slightly by updating the DB timestamp so it waits another 2 hours
+        await updateDoc(docRef, { lastWaterTime: now }); 
     }
 
-    // Step 2: Check Permission Status
-    if (Notification.permission === "granted") {
-        sendTestNotif();
-    } else if (Notification.permission === "denied") {
-        alert("Notifications are BLOCKED in settings. Please reset site permissions.");
+    // 2. MEDICINE CHECK (10 PM)
+    if (currentHour === 22 && !data.medTaken) {
+        // Simple check: use localStorage to ensure we only send ONCE per day
+        const todayStr = getTodayStr();
+        if (localStorage.getItem('med_notif') !== todayStr) {
+            sendNotification("Medicine Reminder 💊", "Please take your meds now. Your health is the most important thing!");
+            localStorage.setItem('med_notif', todayStr);
+        }
+    }
+
+    // 3. SLEEP CHECK (11 PM)
+    if (currentHour === 23 && !data.sleepHours) {
+        const todayStr = getTodayStr();
+        if (localStorage.getItem('sleep_notif') !== todayStr) {
+            sendNotification("Go to sleep, kiddo 😴", "It's late. Put the phone away and get some rest.");
+            localStorage.setItem('sleep_notif', todayStr);
+        }
+    }
+}
+
+// Helper for sending
+function sendNotification(title, body) {
+    if (navigator.serviceWorker.controller) {
+        navigator.serviceWorker.controller.postMessage({
+            type: 'NOTIFY', title: title, body: body
+        });
     } else {
-        // Step 3: Request Permission
-        Notification.requestPermission().then(permission => {
-            if (permission === "granted") {
-                sendTestNotif();
-            } else {
-                alert("Permission was not granted.");
-            }
+        new Notification(title, { body: body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
+    }
+}
+
+// --- MANUAL TEST BUTTON (Now cycles through messages) ---
+btnTestNotif.addEventListener('click', () => {
+    const msgs = [
+        { t: "Kiddo, have some water! 💧", b: "You haven't drunk water in the past 2 hrs. Hydrate now!" },
+        { t: "Medicine Reminder 💊", b: "Please take your meds now. Your health is the most important thing!" },
+        { t: "Go to sleep, kiddo 😴", b: "It's late. Put the phone away and get some rest." }
+    ];
+    // Pick a random one for testing
+    const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
+    
+    if (Notification.permission === "granted") {
+        sendNotification(randomMsg.t, randomMsg.b);
+    } else {
+        Notification.requestPermission().then(p => {
+            if (p === "granted") sendNotification(randomMsg.t, randomMsg.b);
         });
     }
 });
-
-function sendTestNotif() {
-    const title = "Chirkut Reminder 🔔";
-    const options = {
-        body: "Test successful! You will get reminders here.",
-        icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙",
-        vibrate: [200, 100, 200]
-    };
-
-    // Try Service Worker first (Best for Mobile)
-    if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'NOTIFY', title: title, body: options.body
-        });
-    } else {
-        // Fallback to standard
-        new Notification(title, options);
-    }
-}
-
