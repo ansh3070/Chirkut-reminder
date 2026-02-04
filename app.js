@@ -1,7 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-// --- FIREBASE CONFIG (Already Correct) ---
+// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
     authDomain: "reminder-4f2f7.firebaseapp.com",
@@ -24,8 +24,6 @@ const appContainer = document.getElementById('app-container');
 const loadingScreen = document.getElementById('loading-screen');
 const affirmationText = document.getElementById('affirmation-text');
 const dateBadge = document.getElementById('display-date');
-
-// Trackers
 const btnWater = document.getElementById('btn-water');
 const lblWaterCount = document.getElementById('water-count');
 const lblWaterTime = document.getElementById('water-last-time');
@@ -34,46 +32,51 @@ const lblMed = document.getElementById('med-status');
 const inpSleep = document.getElementById('sleep-input');
 const btnSleep = document.getElementById('btn-sleep');
 const lblSleep = document.getElementById('sleep-status');
-
-// History & Modals
 const btnHistory = document.getElementById('btn-history');
 const modalHistory = document.getElementById('history-modal');
 const closeHistory = document.getElementById('close-history');
 const historyList = document.getElementById('history-list');
 const btnTestNotif = document.getElementById('btn-test-notif');
 
+// --- 1. NEW MOTIVATIONAL AFFIRMATIONS ---
 const affirmations = [
-    "You are worthy of care 💙", "One sip at a time.", "Gentle reminder: Unclench your jaw.",
-    "You are doing enough.", "Rest is productive too.", "Be kind to yourself today."
+    "Your brain needs water to think clearly. Sip sip! 💧",
+    "Meds are a form of self-love, not a chore. 💊",
+    "Good sleep tonight means a better tomorrow. 🌙",
+    "Hydration is the key to glowing energy. ✨",
+    "You deserve to feel healthy and rested.",
+    "Small steps: One cup, one pill, one nap.",
+    "Be gentle with yourself today 💙"
 ];
 
 // --- INITIALIZATION ---
 window.addEventListener('load', async () => {
-    // 1. Service Worker Register
+    // Register Service Worker
     if ('serviceWorker' in navigator) {
-        try {
-            const reg = await navigator.serviceWorker.register('./sw.js');
-            console.log("SW Registered:", reg);
-        } catch (err) {
-            console.log("SW Failed:", err);
-        }
+        navigator.serviceWorker.register('./sw.js')
+            .then(reg => console.log("SW Registered"))
+            .catch(err => console.log("SW Fail", err));
     }
 
-    // 2. UI Setup
+    // Check Notification Permission on load
+    if (Notification.permission !== "granted") {
+        console.log("Permission state:", Notification.permission);
+    }
+
+    // Setup UI
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
 
-    // 3. Load Data
+    // Load Data
     await loadTodayData();
 
-    // 4. Reveal App
+    // Show App
     setTimeout(() => {
         loadingScreen.style.display = 'none';
-        appContainer.classList.remove('hidden'); // This triggers CSS opacity transition
+        appContainer.classList.remove('hidden');
     }, 1500);
 });
 
-// --- AFFIRMATION ROTATION ---
 function startAffirmations() {
     let i = 0;
     setInterval(() => {
@@ -83,10 +86,10 @@ function startAffirmations() {
             affirmationText.innerText = affirmations[i];
             affirmationText.style.opacity = 1;
         }, 500);
-    }, 15000);
+    }, 15000); // Change every 15s
 }
 
-// --- DATA HANDLING ---
+// --- DATA LOGIC ---
 async function loadTodayData() {
     try {
         const snap = await getDoc(docRef);
@@ -101,12 +104,8 @@ async function loadTodayData() {
             updateUI(initialData);
         }
     } catch (e) {
-        console.error("Firebase Error:", e);
-        // Alert user if permission issue
-        if(e.code === 'permission-denied') {
-            affirmationText.innerText = "Error: Database locked. Fix Rules in Console.";
-            affirmationText.style.color = "red";
-        }
+        console.error(e);
+        affirmationText.innerText = "Error: Check Console";
     }
 }
 
@@ -117,9 +116,7 @@ function updateUI(data) {
         lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
     }
     if (data.medTaken) {
-        btnMed.innerText = "Taken ✔";
-        btnMed.classList.add('taken');
-        btnMed.disabled = true;
+        btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
         lblMed.innerText = "Good job! 💙";
     }
     if (data.sleepHours) {
@@ -128,13 +125,12 @@ function updateUI(data) {
     }
 }
 
-// --- BUTTON ACTIONS ---
+// --- BUTTONS ---
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
     let count = parseInt(lblWaterCount.innerText) || 0;
     count++;
-    lblWaterCount.innerText = `${count} cups`; // Optimistic update
-    
+    lblWaterCount.innerText = `${count} cups`;
     await updateDoc(docRef, { waterCount: count, lastWaterTime: now });
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
@@ -154,91 +150,91 @@ btnSleep.addEventListener('click', async () => {
     lblSleep.innerText = "Saved ✔";
 });
 
-// --- HISTORY & DELETE LOGIC ---
-btnHistory.addEventListener('click', loadHistory);
-closeHistory.addEventListener('click', () => modalHistory.classList.add('hidden'));
-
-async function loadHistory() {
+// --- HISTORY ---
+btnHistory.addEventListener('click', async () => {
     modalHistory.classList.remove('hidden');
-    historyList.innerHTML = '<p style="text-align:center; margin-top:20px;">Loading...</p>';
-
+    historyList.innerHTML = '<p style="text-align:center;">Loading...</p>';
+    
     const historyRef = collection(db, "users", USER_ID, "dailyLogs");
     const q = query(historyRef, orderBy("date", "desc"), limit(10));
     const snaps = await getDocs(q);
 
     historyList.innerHTML = "";
     if (snaps.empty) {
-        historyList.innerHTML = "<p style='text-align:center; padding:20px;'>No history yet.</p>";
+        historyList.innerHTML = "<p style='text-align:center;'>No history yet.</p>";
         return;
     }
 
     snaps.forEach((docSnap) => {
         const d = docSnap.data();
-        const dateObj = new Date(d.date);
-        const dateNice = dateObj.toLocaleDateString('en-US', { weekday: 'short', day: 'numeric', month: 'short' });
+        const dateNice = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
         
-        // Create Item
         const div = document.createElement('div');
         div.className = 'history-item';
         div.innerHTML = `
             <div class="h-info">
                 <span class="h-date">${dateNice}</span>
-                <span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h | ${d.medTaken ? '💊 Yes' : 'No Meds'}</span>
+                <span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h | ${d.medTaken ? '💊 Yes' : '❌'}</span>
             </div>
-            <div class="h-actions">
-                <button class="btn-delete" data-date="${d.date}">🗑️</button>
-            </div>
+            <button class="btn-delete" data-date="${d.date}">🗑️</button>
         `;
         historyList.appendChild(div);
     });
 
-    // Attach Delete Events
     document.querySelectorAll('.btn-delete').forEach(btn => {
         btn.addEventListener('click', (e) => deleteEntry(e.target.dataset.date));
     });
-}
+});
+
+closeHistory.addEventListener('click', () => modalHistory.classList.add('hidden'));
 
 async function deleteEntry(dateStr) {
-    if(!confirm("Delete this entry?")) return;
-    
-    // UI Remove immediately
-    loadHistory(); 
-
-    // DB Delete
-    const entryRef = doc(db, "users", USER_ID, "dailyLogs", dateStr);
-    await deleteDoc(entryRef);
+    if(!confirm("Delete this?")) return;
+    await deleteDoc(doc(db, "users", USER_ID, "dailyLogs", dateStr));
+    btnHistory.click(); // Reload
 }
 
-// --- NOTIFICATION FIX ---
+// --- 2. NOTIFICATION FIX WITH DEBUGGER ---
 btnTestNotif.addEventListener('click', () => {
-    // 1. Request Permission if not granted
-    if (Notification.permission !== "granted") {
-        Notification.requestPermission().then(permission => {
-            if (permission === "granted") sendTestNotif();
-            else alert("Permission blocked. Reset browser settings for this site.");
-        });
-    } else {
+    // Step 1: Check if browser supports it
+    if (!("Notification" in window)) {
+        alert("This browser does not support notifications.");
+        return;
+    }
+
+    // Step 2: Check Permission Status
+    if (Notification.permission === "granted") {
         sendTestNotif();
+    } else if (Notification.permission === "denied") {
+        alert("Notifications are BLOCKED in settings. Please reset site permissions.");
+    } else {
+        // Step 3: Request Permission
+        Notification.requestPermission().then(permission => {
+            if (permission === "granted") {
+                sendTestNotif();
+            } else {
+                alert("Permission was not granted.");
+            }
+        });
     }
 });
 
 function sendTestNotif() {
     const title = "Chirkut Reminder 🔔";
     const options = {
-        body: "This is a test! You are amazing.",
-        icon: 'https://via.placeholder.com/128/8ac6d1/ffffff?text=💙'
+        body: "Test successful! You will get reminders here.",
+        icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙",
+        vibrate: [200, 100, 200]
     };
 
-    // METHOD A: Service Worker (Better for Android)
+    // Try Service Worker first (Best for Mobile)
     if (navigator.serviceWorker.controller) {
         navigator.serviceWorker.controller.postMessage({
             type: 'NOTIFY', title: title, body: options.body
         });
-        console.log("Sent via Service Worker");
-    } 
-    // METHOD B: Direct (Fallback)
-    else {
+    } else {
+        // Fallback to standard
         new Notification(title, options);
-        console.log("Sent via Direct API");
     }
 }
+
