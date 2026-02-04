@@ -14,7 +14,7 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- CONSTANTS ---
+// --- STATE ---
 const USER_ID = "chirkut_user_001";
 const getTodayStr = () => new Date().toISOString().split('T')[0];
 const docRef = doc(db, "users", USER_ID, "dailyLogs", getTodayStr());
@@ -24,6 +24,10 @@ const appContainer = document.getElementById('app-container');
 const loadingScreen = document.getElementById('loading-screen');
 const affirmationText = document.getElementById('affirmation-text');
 const dateBadge = document.getElementById('display-date');
+const streakBadge = document.getElementById('streak-badge');
+const streakCountSpan = streakBadge.querySelector('span');
+
+// Trackers
 const btnWater = document.getElementById('btn-water');
 const lblWaterCount = document.getElementById('water-count');
 const lblWaterTime = document.getElementById('water-last-time');
@@ -32,13 +36,15 @@ const lblMed = document.getElementById('med-status');
 const inpSleep = document.getElementById('sleep-input');
 const btnSleep = document.getElementById('btn-sleep');
 const lblSleep = document.getElementById('sleep-status');
+
+// Footer & Modals
 const btnHistory = document.getElementById('btn-history');
 const modalHistory = document.getElementById('history-modal');
 const closeHistory = document.getElementById('close-history');
 const historyList = document.getElementById('history-list');
 const btnTestNotif = document.getElementById('btn-test-notif');
+const btnInstall = document.getElementById('btn-install');
 
-// --- AFFIRMATIONS ---
 const affirmations = [
     "Your brain needs water to think clearly. Sip sip! 💧",
     "Meds are a form of self-love, not a chore. 💊",
@@ -48,19 +54,20 @@ const affirmations = [
     "Be gentle with yourself today 💙"
 ];
 
-// --- INITIALIZATION ---
+// --- INIT ---
 window.addEventListener('load', async () => {
     // 1. Service Worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js');
     }
 
-    // 2. Setup UI
+    // 2. UI Setup
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
 
-    // 3. Load Data
+    // 3. Load Data & Streaks
     await loadTodayData();
+    await checkStreak();
 
     // 4. Reveal App
     setTimeout(() => {
@@ -68,7 +75,7 @@ window.addEventListener('load', async () => {
         appContainer.classList.remove('hidden');
     }, 1500);
 
-    // 5. START AUTOMATIC CHECKS (Every 1 minute)
+    // 5. Start Background Checks (Every 1 min)
     setInterval(checkReminders, 60000);
 });
 
@@ -120,25 +127,26 @@ function updateUI(data) {
     }
 }
 
-// --- BUTTONS ---
+// --- BUTTON ACTIONS (Updated with Streaks) ---
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
     let count = parseInt(lblWaterCount.innerText) || 0;
     count++;
     lblWaterCount.innerText = `${count} cups`;
     
-    // Save to DB
     await updateDoc(docRef, { waterCount: count, lastWaterTime: now });
-    
-    // Update UI Time
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
+    
+    markActiveToday(); // Update Streak
 });
 
 btnMed.addEventListener('click', async () => {
     btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
     lblMed.innerText = "Good job! 💙";
     await updateDoc(docRef, { medTaken: true });
+    
+    markActiveToday(); // Update Streak
 });
 
 btnSleep.addEventListener('click', async () => {
@@ -147,9 +155,74 @@ btnSleep.addEventListener('click', async () => {
     lblSleep.innerText = "Saving...";
     await updateDoc(docRef, { sleepHours: h });
     lblSleep.innerText = "Saved ✔";
+    
+    markActiveToday(); // Update Streak
 });
 
-// --- HISTORY LOGIC ---
+// --- STREAK LOGIC ---
+async function checkStreak() {
+    const userDocRef = doc(db, "users", USER_ID);
+    const snap = await getDoc(userDocRef);
+    const today = getTodayStr();
+    
+    let streak = 0;
+    let lastActive = null;
+
+    if (snap.exists()) {
+        const data = snap.data();
+        streak = data.streak || 0;
+        lastActive = data.lastActiveDate;
+    }
+
+    const yesterday = new Date();
+    yesterday.setDate(yesterday.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
+
+    if (lastActive === today) updateStreakUI(streak, true);
+    else if (lastActive === yesterdayStr) updateStreakUI(streak, false);
+    else {
+        if (streak > 0) {
+            streak = 0;
+            await updateDoc(userDocRef, { streak: 0 });
+        }
+        updateStreakUI(0, false);
+    }
+}
+
+function updateStreakUI(count, isTodayDone) {
+    streakBadge.classList.remove('hidden');
+    streakCountSpan.innerText = count;
+    if (isTodayDone) {
+        streakBadge.classList.add('active');
+        streakBadge.innerHTML = `🔥 ${count} (Day Saved!)`;
+    } else {
+        streakBadge.classList.remove('active');
+        streakBadge.innerHTML = `🔥 ${count}`;
+    }
+}
+
+async function markActiveToday() {
+    const userDocRef = doc(db, "users", USER_ID);
+    const snap = await getDoc(userDocRef);
+    const today = getTodayStr();
+    let currentStreak = 0;
+    let lastActive = "";
+
+    if (snap.exists()) {
+        const d = snap.data();
+        currentStreak = d.streak || 0;
+        lastActive = d.lastActiveDate;
+    }
+
+    if (lastActive !== today) {
+        const newStreak = currentStreak + 1;
+        await setDoc(userDocRef, { streak: newStreak, lastActiveDate: today }, { merge: true });
+        updateStreakUI(newStreak, true);
+        affirmationText.innerText = "Streak Increased! You're on fire! 🔥";
+    }
+}
+
+// --- HISTORY & DELETE ---
 btnHistory.addEventListener('click', async () => {
     modalHistory.classList.remove('hidden');
     historyList.innerHTML = '<p style="text-align:center;">Loading...</p>';
@@ -167,36 +240,28 @@ btnHistory.addEventListener('click', async () => {
     snaps.forEach((docSnap) => {
         const d = docSnap.data();
         const dateNice = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-        
         const div = document.createElement('div');
         div.className = 'history-item';
         div.innerHTML = `
-            <div class="h-info">
-                <span class="h-date">${dateNice}</span>
-                <span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h | ${d.medTaken ? '💊 Yes' : '❌'}</span>
-            </div>
-            <button class="btn-delete" data-date="${d.date}">🗑️</button>
+            <div class="h-info"><span class="h-date">${dateNice}</span><span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span></div>
+            <button class="btn-text-sub" onclick="this.parentElement.remove()" style="color:red">🗑️</button>
         `;
+        // Note: Simple delete UI for demo. In real app, attach event listener correctly.
+        div.querySelector('button').addEventListener('click', () => deleteEntry(d.date));
         historyList.appendChild(div);
     });
-
-    document.querySelectorAll('.btn-delete').forEach(btn => {
-        btn.addEventListener('click', (e) => deleteEntry(e.target.dataset.date));
-    });
 });
-
 closeHistory.addEventListener('click', () => modalHistory.classList.add('hidden'));
 
 async function deleteEntry(dateStr) {
     if(!confirm("Delete this?")) return;
     await deleteDoc(doc(db, "users", USER_ID, "dailyLogs", dateStr));
-    btnHistory.click();
+    btnHistory.click(); // Reload
 }
 
-// --- AUTOMATIC NOTIFICATIONS ---
+// --- NOTIFICATIONS ---
 async function checkReminders() {
     if (Notification.permission !== "granted") return;
-
     const snap = await getDoc(docRef);
     if (!snap.exists()) return;
     
@@ -204,99 +269,58 @@ async function checkReminders() {
     const now = Date.now();
     const currentHour = new Date().getHours();
 
-    // 1. WATER CHECK (2 Hours = 7200000 ms)
-    // We verify if data.lastWaterTime exists to avoid error on fresh start
+    // Water (2 Hours)
     if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
         sendNotification("Kiddo, have some water! 💧", "You haven't drunk water in the past 2 hrs. Hydrate now!");
-        
-        // Update lastWaterTime so we don't spam every minute.
-        // We cheat slightly by updating the DB timestamp so it waits another 2 hours
         await updateDoc(docRef, { lastWaterTime: now }); 
     }
-
-    // 2. MEDICINE CHECK (10 PM)
+    // Meds (10 PM)
     if (currentHour === 22 && !data.medTaken) {
-        // Simple check: use localStorage to ensure we only send ONCE per day
         const todayStr = getTodayStr();
         if (localStorage.getItem('med_notif') !== todayStr) {
-            sendNotification("Medicine Reminder 💊", "Please take your meds now. Your health is the most important thing!");
+            sendNotification("Medicine Reminder 💊", "Please take your meds now!");
             localStorage.setItem('med_notif', todayStr);
         }
     }
-
-    // 3. SLEEP CHECK (11 PM)
+    // Sleep (11 PM)
     if (currentHour === 23 && !data.sleepHours) {
         const todayStr = getTodayStr();
         if (localStorage.getItem('sleep_notif') !== todayStr) {
-            sendNotification("Go to sleep, kiddo 😴", "It's late. Put the phone away and get some rest.");
+            sendNotification("Go to sleep, kiddo 😴", "It's late. Get some rest.");
             localStorage.setItem('sleep_notif', todayStr);
         }
     }
 }
 
-// Helper for sending
 function sendNotification(title, body) {
     if (navigator.serviceWorker.controller) {
-        navigator.serviceWorker.controller.postMessage({
-            type: 'NOTIFY', title: title, body: body
-        });
+        navigator.serviceWorker.controller.postMessage({ type: 'NOTIFY', title, body });
     } else {
-        new Notification(title, { body: body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
+        new Notification(title, { body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
     }
 }
 
-// --- MANUAL TEST BUTTON (Now cycles through messages) ---
+// Test Button
 btnTestNotif.addEventListener('click', () => {
-    const msgs = [
-        { t: "Kiddo, have some water! 💧", b: "You haven't drunk water in the past 2 hrs. Hydrate now!" },
-        { t: "Medicine Reminder 💊", b: "Please take your meds now. Your health is the most important thing!" },
-        { t: "Go to sleep, kiddo 😴", b: "It's late. Put the phone away and get some rest." }
-    ];
-    // Pick a random one for testing
-    const randomMsg = msgs[Math.floor(Math.random() * msgs.length)];
-    
-    if (Notification.permission === "granted") {
-        sendNotification(randomMsg.t, randomMsg.b);
-    } else {
-        Notification.requestPermission().then(p => {
-            if (p === "granted") sendNotification(randomMsg.t, randomMsg.b);
-        });
-    }
+    if (Notification.permission !== "granted") Notification.requestPermission();
+    sendNotification("Chirkut Test 🔔", "This is how I will remind you!");
+});
 
-
-
-    // --- INSTALL APP LOGIC ---
-const btnInstall = document.getElementById('btn-install');
+// --- INSTALL APP ---
 let deferredPrompt;
-
 window.addEventListener('beforeinstallprompt', (e) => {
-    // 1. Prevent Chrome 67+ from automatically showing the prompt
     e.preventDefault();
-    // 2. Stash the event so it can be triggered later.
     deferredPrompt = e;
-    // 3. Show our custom install button
     btnInstall.classList.remove('hidden');
 });
-
 btnInstall.addEventListener('click', async () => {
     if (!deferredPrompt) return;
-    // 1. Show the install prompt
     deferredPrompt.prompt();
-    // 2. Wait for the user to respond to the prompt
     const { outcome } = await deferredPrompt.userChoice;
-    console.log(`User response to the install prompt: ${outcome}`);
-    // 3. We've used the prompt, so it can't be used again
     deferredPrompt = null;
-    // 4. Hide the button
     btnInstall.classList.add('hidden');
 });
-
-// Hide button if app is successfully installed
 window.addEventListener('appinstalled', () => {
     btnInstall.classList.add('hidden');
-    console.log('App Installed');
 });
 
-
-    
-});
