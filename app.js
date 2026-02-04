@@ -56,26 +56,23 @@ const affirmations = [
 
 // --- INIT ---
 window.addEventListener('load', async () => {
-    // 1. Service Worker
     if ('serviceWorker' in navigator) {
         navigator.serviceWorker.register('./sw.js');
     }
 
-    // 2. UI Setup
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
 
-    // 3. Load Data & Streaks
     await loadTodayData();
     await checkStreak();
 
-    // 4. Reveal App
+    // Reveal App
     setTimeout(() => {
         loadingScreen.style.display = 'none';
         appContainer.classList.remove('hidden');
     }, 1500);
 
-    // 5. Start Background Checks (Every 1 min)
+    // Background Checks
     setInterval(checkReminders, 60000);
 });
 
@@ -127,7 +124,7 @@ function updateUI(data) {
     }
 }
 
-// --- BUTTON ACTIONS (Updated with Streaks) ---
+// --- BUTTON ACTIONS ---
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
     let count = parseInt(lblWaterCount.innerText) || 0;
@@ -138,7 +135,7 @@ btnWater.addEventListener('click', async () => {
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
     
-    markActiveToday(); // Update Streak
+    markActiveToday(); 
 });
 
 btnMed.addEventListener('click', async () => {
@@ -146,7 +143,7 @@ btnMed.addEventListener('click', async () => {
     lblMed.innerText = "Good job! 💙";
     await updateDoc(docRef, { medTaken: true });
     
-    markActiveToday(); // Update Streak
+    markActiveToday();
 });
 
 btnSleep.addEventListener('click', async () => {
@@ -156,7 +153,7 @@ btnSleep.addEventListener('click', async () => {
     await updateDoc(docRef, { sleepHours: h });
     lblSleep.innerText = "Saved ✔";
     
-    markActiveToday(); // Update Streak
+    markActiveToday();
 });
 
 // --- STREAK LOGIC ---
@@ -222,41 +219,58 @@ async function markActiveToday() {
     }
 }
 
-// --- HISTORY & DELETE ---
+// --- HISTORY & DELETE (Corrected) ---
 btnHistory.addEventListener('click', async () => {
     modalHistory.classList.remove('hidden');
+    await renderHistoryList();
+});
+
+closeHistory.addEventListener('click', () => {
+    modalHistory.classList.add('hidden');
+});
+
+async function renderHistoryList() {
     historyList.innerHTML = '<p style="text-align:center;">Loading...</p>';
     
-    const historyRef = collection(db, "users", USER_ID, "dailyLogs");
-    const q = query(historyRef, orderBy("date", "desc"), limit(10));
-    const snaps = await getDocs(q);
+    try {
+        const historyRef = collection(db, "users", USER_ID, "dailyLogs");
+        const q = query(historyRef, orderBy("date", "desc"), limit(10));
+        const snaps = await getDocs(q);
 
-    historyList.innerHTML = "";
-    if (snaps.empty) {
-        historyList.innerHTML = "<p style='text-align:center;'>No history yet.</p>";
-        return;
+        historyList.innerHTML = "";
+        
+        if (snaps.empty) {
+            historyList.innerHTML = "<p style='text-align:center;'>No history yet.</p>";
+            return;
+        }
+
+        snaps.forEach((docSnap) => {
+            const d = docSnap.data();
+            const dateNice = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
+            
+            const div = document.createElement('div');
+            div.className = 'history-item';
+            div.innerHTML = `
+                <div class="h-info">
+                    <span class="h-date">${dateNice}</span>
+                    <span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span>
+                </div>
+                <button class="btn-delete" style="border:none; background:none; font-size:1.2rem;">🗑️</button>
+            `;
+            
+            // Attach event listener directly to element
+            div.querySelector('.btn-delete').addEventListener('click', () => deleteEntry(d.date));
+            historyList.appendChild(div);
+        });
+    } catch (error) {
+        console.error("History Error:", error);
     }
-
-    snaps.forEach((docSnap) => {
-        const d = docSnap.data();
-        const dateNice = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-        const div = document.createElement('div');
-        div.className = 'history-item';
-        div.innerHTML = `
-            <div class="h-info"><span class="h-date">${dateNice}</span><span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span></div>
-            <button class="btn-text-sub" onclick="this.parentElement.remove()" style="color:red">🗑️</button>
-        `;
-        // Note: Simple delete UI for demo. In real app, attach event listener correctly.
-        div.querySelector('button').addEventListener('click', () => deleteEntry(d.date));
-        historyList.appendChild(div);
-    });
-});
-closeHistory.addEventListener('click', () => modalHistory.classList.add('hidden'));
+}
 
 async function deleteEntry(dateStr) {
     if(!confirm("Delete this?")) return;
     await deleteDoc(doc(db, "users", USER_ID, "dailyLogs", dateStr));
-    btnHistory.click(); // Reload
+    await renderHistoryList(); // Refresh without reloading page
 }
 
 // --- NOTIFICATIONS ---
