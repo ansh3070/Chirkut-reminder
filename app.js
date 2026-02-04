@@ -262,4 +262,41 @@ btnTestNotif.addEventListener('click', () => {
             if (p === "granted") sendNotification(randomMsg.t, randomMsg.b);
         });
     }
+
+
+
+    // --- INSTALL APP LOGIC ---
+const btnInstall = document.getElementById('btn-install');
+let deferredPrompt;
+
+window.addEventListener('beforeinstallprompt', (e) => {
+    // 1. Prevent Chrome 67+ from automatically showing the prompt
+    e.preventDefault();
+    // 2. Stash the event so it can be triggered later.
+    deferredPrompt = e;
+    // 3. Show our custom install button
+    btnInstall.classList.remove('hidden');
+});
+
+btnInstall.addEventListener('click', async () => {
+    if (!deferredPrompt) return;
+    // 1. Show the install prompt
+    deferredPrompt.prompt();
+    // 2. Wait for the user to respond to the prompt
+    const { outcome } = await deferredPrompt.userChoice;
+    console.log(`User response to the install prompt: ${outcome}`);
+    // 3. We've used the prompt, so it can't be used again
+    deferredPrompt = null;
+    // 4. Hide the button
+    btnInstall.classList.add('hidden');
+});
+
+// Hide button if app is successfully installed
+window.addEventListener('appinstalled', () => {
+    btnInstall.classList.add('hidden');
+    console.log('App Installed');
+});
+
+
+    
 });
