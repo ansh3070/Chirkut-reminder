@@ -1,249 +1,246 @@
-// --- FIREBASE CONFIGURATION ---
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-// REPLACE WITH YOUR ACTUAL FIREBASE CONFIG
+// --- YOUR FIREBASE CONFIG ---
 const firebaseConfig = {
-    apiKey: "YOUR_API_KEY",
-    authDomain: "YOUR_PROJECT_ID.firebaseapp.com",
-    projectId: "YOUR_PROJECT_ID",
-    storageBucket: "YOUR_PROJECT_ID.appspot.com",
-    messagingSenderId: "YOUR_SENDER_ID",
-    appId: "YOUR_APP_ID"
+    apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
+    authDomain: "reminder-4f2f7.firebaseapp.com",
+    projectId: "reminder-4f2f7",
+    storageBucket: "reminder-4f2f7.firebasestorage.app",
+    messagingSenderId: "283593484172",
+    appId: "1:283593484172:web:6530e100a16f4839f2d8a9"
 };
 
-// Initialize Firebase
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- STATE & UTILS ---
-const USER_ID = "chirkut_user_001"; // In a real app, use Auth or UUID
-const docRef = doc(db, "users", USER_ID);
-
-const affirmations = [
-    "You are doing your best, and that is enough.",
-    "Breathe in calm, breathe out stress.",
-    "Small steps lead to big changes.",
-    "You are loved, you are valued.",
-    "Take your time, there is no rush.",
-    "Be gentle with yourself today.",
-    "Sending you a virtual hug.",
-    "Your health is your wealth, take care.",
-    "It's okay to rest."
-];
+// --- STATE ---
+const USER_ID = "chirkut_user_001";
+const getTodayStr = () => new Date().toISOString().split('T')[0]; // "YYYY-MM-DD"
+const docRef = doc(db, "users", USER_ID, "dailyLogs", getTodayStr()); // New Structure
 
 // --- DOM ELEMENTS ---
+const appContainer = document.getElementById('app-container');
 const loadingScreen = document.getElementById('loading-screen');
-const appContent = document.getElementById('app-content');
 const affirmationText = document.getElementById('affirmation-text');
+const dateBadge = document.getElementById('display-date');
+
+// Trackers
 const btnWater = document.getElementById('btn-water');
-const statusWater = document.getElementById('water-status');
-const inputSleep = document.getElementById('sleep-input');
-const btnSleep = document.getElementById('btn-sleep');
-const msgSleep = document.getElementById('sleep-msg');
+const lblWaterCount = document.getElementById('water-count');
+const lblWaterTime = document.getElementById('water-last-time');
 const btnMed = document.getElementById('btn-med');
-const statusMed = document.getElementById('med-status');
+const lblMed = document.getElementById('med-status');
+const inpSleep = document.getElementById('sleep-input');
+const btnSleep = document.getElementById('btn-sleep');
+const lblSleep = document.getElementById('sleep-status');
 
-// --- 1. LOADING SCREEN & INIT ---
-window.addEventListener('load', () => {
-    // Register Service Worker
+// History & Modals
+const btnHistory = document.getElementById('btn-history');
+const modalHistory = document.getElementById('history-modal');
+const closeHistory = document.getElementById('close-history');
+const historyList = document.getElementById('history-list');
+const btnTestNotif = document.getElementById('btn-test-notif');
+
+// --- AFFIRMATIONS ---
+const affirmations = [
+    "You are worthy of care 💙",
+    "One sip at a time.",
+    "Gentle reminder: Unclench your jaw.",
+    "You are doing enough.",
+    "Rest is productive too.",
+    "Be kind to yourself today."
+];
+
+// --- INIT ---
+window.addEventListener('load', async () => {
+    // 1. Service Worker
     if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js')
-            .then(() => console.log('Service Worker Registered'));
+        navigator.serviceWorker.register('./sw.js');
     }
-
-    // Request Notification Permission
+    
+    // 2. Permission
     if (Notification.permission !== "granted") {
         Notification.requestPermission();
     }
 
-    // 1.5s Loading Delay
-    setTimeout(() => {
-        loadingScreen.style.opacity = '0';
-        setTimeout(() => {
-            loadingScreen.style.display = 'none';
-            appContent.classList.remove('hidden');
-            // Trigger reflow
-            void appContent.offsetWidth; 
-            appContent.classList.add('visible');
-            loadUserData(); // Fetch from Firebase
-        }, 500);
-    }, 1500);
-
-    // Start Affirmation Rotation
+    // 3. UI Init
+    dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
-    
-    // Start Background Checks
-    setInterval(checkReminders, 60000); // Check every minute
+
+    // 4. Data Load
+    await loadTodayData();
+
+    // 5. Hide Loader
+    setTimeout(() => {
+        loadingScreen.style.display = 'none';
+        appContainer.classList.remove('hidden');
+        appContainer.classList.add('visible');
+    }, 1500);
 });
 
-// --- 2. AFFIRMATION SYSTEM ---
 function startAffirmations() {
-    let index = 0;
+    let i = 0;
     setInterval(() => {
-        affirmationText.classList.add('fade-out');
-        
+        affirmationText.style.opacity = 0;
         setTimeout(() => {
-            index = (index + 1) % affirmations.length;
-            affirmationText.innerText = affirmations[index];
-            affirmationText.classList.remove('fade-out');
-        }, 800); // Wait for fade out
-    }, 20000); // Change every 20 seconds
+            i = (i + 1) % affirmations.length;
+            affirmationText.innerText = affirmations[i];
+            affirmationText.style.opacity = 1;
+        }, 500);
+    }, 15000);
 }
 
-// --- DATA LOGIC (FIREBASE) ---
-
-// Helper to get today's date string (YYYY-MM-DD) for reset logic
-const getTodayStr = () => new Date().toISOString().split('T')[0];
-
-async function loadUserData() {
+// --- DATA LOGIC (DB) ---
+async function loadTodayData() {
     try {
-        const docSnap = await getDoc(docRef);
-        const today = getTodayStr();
-        
-        if (docSnap.exists()) {
-            const data = docSnap.data();
-            
-            // Check Midnight Reset
-            if (data.currentDate !== today) {
-                // Reset daily values
-                await resetDailyValues(today);
-            } else {
-                updateUI(data);
-            }
+        const snap = await getDoc(docRef);
+        if (snap.exists()) {
+            updateUI(snap.data());
         } else {
-            // First time user
-            await resetDailyValues(today);
+            // New day, create doc
+            const initialData = {
+                waterCount: 0,
+                lastWaterTime: null,
+                medTaken: false,
+                sleepHours: 0,
+                date: getTodayStr(),
+                timestamp: Date.now() // For sorting
+            };
+            await setDoc(docRef, initialData);
+            updateUI(initialData);
         }
     } catch (e) {
-        console.error("Error loading data:", e);
+        console.error("Firebase Error:", e);
+        affirmationText.innerText = "Offline Mode 💙";
     }
-}
-
-async function resetDailyValues(dateStr) {
-    const freshData = {
-        currentDate: dateStr,
-        dailyWaterCount: 0,
-        lastWaterTime: Date.now(), // Reset timer
-        sleepHours: 0,
-        medicineTaken: false,
-        medicineTakenAt: null
-    };
-    await setDoc(docRef, freshData);
-    updateUI(freshData);
 }
 
 function updateUI(data) {
     // Water
-    if(data.lastWaterTime) {
-        const date = new Date(data.lastWaterTime);
-        statusWater.innerText = `Last sip: ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
+    lblWaterCount.innerText = `${data.waterCount || 0} cups`;
+    if (data.lastWaterTime) {
+        const d = new Date(data.lastWaterTime);
+        lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
+    }
+
+    // Meds
+    if (data.medTaken) {
+        btnMed.innerText = "Taken ✔";
+        btnMed.classList.add('taken');
+        lblMed.innerText = "Good job! 💙";
+        btnMed.disabled = true;
     }
 
     // Sleep
-    if(data.sleepHours > 0) {
-        inputSleep.value = data.sleepHours;
-        msgSleep.innerText = "Sleep logged 🌙";
-    }
-
-    // Medicine
-    if (data.medicineTaken) {
-        btnMed.innerText = "Medicine Taken 💙";
-        btnMed.classList.add('active');
-        btnMed.disabled = true;
-        statusMed.innerText = "Good job taking care of yourself!";
+    if (data.sleepHours) {
+        inpSleep.value = data.sleepHours;
+        lblSleep.innerText = "Saved ✔";
     }
 }
 
-// --- 4. WATER TRACKER ---
+// --- ACTIONS ---
+
+// 1. Water
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
+    // Optimistic UI
+    let currentCount = parseInt(lblWaterCount.innerText) || 0;
+    lblWaterCount.innerText = `${currentCount + 1} cups`;
     
-    // Optimistic UI update
-    const date = new Date(now);
-    statusWater.innerText = `Last sip: ${date.getHours()}:${date.getMinutes().toString().padStart(2, '0')}`;
-    
-    // Update Firebase
-    await updateDoc(docRef, {
-        lastWaterTime: now,
-        // increment count logic if needed
-    });
-});
-
-// --- 5. SLEEP TRACKER ---
-btnSleep.addEventListener('click', async () => {
-    const hours = parseFloat(inputSleep.value);
-    if (!hours || hours < 0) return;
-
-    msgSleep.innerText = "Saving...";
+    // DB Update
+    const snap = await getDoc(docRef); // Get fresh to be safe or use increment
+    const count = (snap.exists() ? snap.data().waterCount : 0) + 1;
     
     await updateDoc(docRef, {
-        sleepHours: hours
+        waterCount: count,
+        lastWaterTime: now
     });
     
-    msgSleep.innerText = "Sleep logged successfully 🌙";
+    const d = new Date(now);
+    lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
 });
 
-// --- 6. MEDICINE TRACKER ---
+// 2. Medicine
 btnMed.addEventListener('click', async () => {
-    btnMed.innerText = "Medicine Taken 💙";
-    btnMed.classList.add('active');
+    btnMed.innerText = "Taken ✔";
+    btnMed.classList.add('taken');
     btnMed.disabled = true;
-    statusMed.innerText = "Good job taking care of yourself!";
+    lblMed.innerText = "Good job! 💙";
 
-    await updateDoc(docRef, {
-        medicineTaken: true,
-        medicineTakenAt: Date.now()
+    await updateDoc(docRef, { medTaken: true });
+});
+
+// 3. Sleep
+btnSleep.addEventListener('click', async () => {
+    const hours = parseFloat(inpSleep.value);
+    if (!hours) return;
+    
+    lblSleep.innerText = "Saving...";
+    await updateDoc(docRef, { sleepHours: hours });
+    lblSleep.innerText = "Saved ✔";
+});
+
+// --- HISTORY VIEWER ---
+btnHistory.addEventListener('click', async () => {
+    modalHistory.classList.remove('hidden');
+    historyList.innerHTML = '<p class="loading-text" style="text-align:center; margin-top:20px;">Loading...</p>';
+
+    // Query last 7 days
+    const historyRef = collection(db, "users", USER_ID, "dailyLogs");
+    const q = query(historyRef, orderBy("date", "desc"), limit(7));
+    
+    const querySnapshot = await getDocs(q);
+    historyList.innerHTML = ""; // Clear loader
+
+    if(querySnapshot.empty) {
+        historyList.innerHTML = "<p style='text-align:center; padding:20px;'>No history yet.</p>";
+        return;
+    }
+
+    querySnapshot.forEach((doc) => {
+        const d = doc.data();
+        const dateObj = new Date(d.date);
+        const dateNice = dateObj.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+        const html = `
+            <div class="history-item">
+                <div>
+                    <span class="h-date">${dateNice}</span>
+                    <div class="h-stats">
+                        💧 ${d.waterCount || 0} cups &nbsp;|&nbsp; 
+                        😴 ${d.sleepHours || 0} hrs
+                    </div>
+                </div>
+                <div style="font-size:1.2rem;">
+                    ${d.medTaken ? '💊' : '❌'}
+                </div>
+            </div>
+        `;
+        historyList.innerHTML += html;
     });
 });
 
-// --- 7. NOTIFICATION LOGIC ---
-function sendNotification(title, body) {
+closeHistory.addEventListener('click', () => {
+    modalHistory.classList.add('hidden');
+});
+
+// --- NOTIFICATION TESTER ---
+btnTestNotif.addEventListener('click', () => {
     if (Notification.permission === "granted") {
-        // Try Service Worker notification first (for mobile support)
+        const title = "Chirkut Test 🔔";
+        const body = "This is how your caring reminders will look!";
+        
         if (navigator.serviceWorker.controller) {
             navigator.serviceWorker.controller.postMessage({
-                type: 'NOTIFY',
-                title: title,
-                body: body
+                type: 'NOTIFY', title, body
             });
         } else {
-            // Fallback
-            new Notification(title, { body: body, icon: '💙' });
+            new Notification(title, { body });
         }
+    } else {
+        alert("Please enable notifications in your browser settings first.");
+        Notification.requestPermission();
     }
-}
-
-async function checkReminders() {
-    const docSnap = await getDoc(docRef);
-    if (!docSnap.exists()) return;
-    
-    const data = docSnap.data();
-    const now = Date.now();
-
-    // A) WATER REMINDER (2 hours = 7200000 ms)
-    // Check if 2 hours passed since last water
-    if (now - data.lastWaterTime > 7200000) {
-        sendNotification("Chirkut Reminder", "Pani pilo kiddo 💧");
-        // Update lastWaterTime to now so we don't spam every minute
-        // In a real app, we might have a 'lastNotificationSent' field instead
-        await updateDoc(docRef, { lastWaterTime: now }); 
-    }
-
-    // B) MEDICINE REMINDER (10:00 PM = 22:00)
-    const currentHour = new Date().getHours();
-    
-    // Trigger only if it's past 10 PM, med not taken, and we haven't notified today
-    // Note: Simple logic here. Ideally, store 'medNotificationSent: boolean' in DB
-    if (currentHour >= 22 && !data.medicineTaken) {
-        // We need a local storage check to ensure we only send this ONCE per session/day
-        const lastMedNotif = localStorage.getItem('lastMedNotification');
-        const today = getTodayStr();
-
-        if (lastMedNotif !== today) {
-            sendNotification("Chirkut Reminder", "Did you take your medicine today? 💊");
-            localStorage.setItem('lastMedNotification', today);
-        }
-    }
-}
+});
 
