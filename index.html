@@ -7,6 +7,7 @@
     <link rel="stylesheet" href="styles.css">
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <meta name="theme-color" content="#fff0f3">
+    <link rel="manifest" href="manifest.json">
 </head>
 <body>
 
@@ -20,7 +21,12 @@
     <div id="app-container" class="hidden">
         
         <nav class="navbar">
-            <span class="logo">Chirkut Reminder</span>
+            <div style="display:flex; align-items:center; gap:10px;">
+                <span class="logo">Chirkut</span>
+                <div id="streak-badge" class="streak-pill hidden">
+                    🔥 <span>0</span>
+                </div>
+            </div>
             <span class="date-badge" id="display-date">Today</span>
         </nav>
 
@@ -37,9 +43,7 @@
                 </div>
                 <h3>Hydration</h3>
                 <p class="subtext" id="water-last-time">No water yet</p>
-                <button id="btn-water" class="btn-action water-btn">
-                    I drank water
-                </button>
+                <button id="btn-water" class="btn-action water-btn">I drank water</button>
             </div>
 
             <div class="card med-card">
@@ -48,9 +52,7 @@
                 </div>
                 <h3>Meds</h3>
                 <p class="subtext" id="med-status">Not taken</p>
-                <button id="btn-med" class="btn-action med-btn">
-                    Mark Taken
-                </button>
+                <button id="btn-med" class="btn-action med-btn">Mark Taken</button>
             </div>
 
             <div class="card sleep-card">
@@ -68,26 +70,27 @@
         </main>
 
         <footer class="bottom-controls">
-    <button id="btn-install" class="btn-text highlight hidden" style="background-color: #ffb7b2; color: white;">
-        📲 Install App
-    </button>
+            <button id="btn-install" class="btn-text highlight hidden" style="background-color: #8ac6d1; color: white;">
+                📲 Install App
+            </button>
 
-    <button id="btn-history" class="btn-text">📜 View History</button>
-    <button id="btn-test-notif" class="btn-text-sub">🔔 Test Notify</button>
-</footer>
+            <a href="https://v0-stoppanic.vercel.app/" target="_blank" class="btn-text panic-btn">
+                🆘 Panic Help
+            </a>
 
+            <button id="btn-history" class="btn-text">📜 View History</button>
+            <button id="btn-test-notif" class="btn-text-sub">🔔 Test Notify</button>
+        </footer>
 
     </div>
 
     <div id="history-modal" class="modal hidden">
         <div class="modal-content">
             <div class="modal-header">
-                <h2>Past Care Logs</h2>
+                <h2>Past Logs</h2>
                 <button id="close-history" class="close-btn">&times;</button>
             </div>
-            <div id="history-list" class="history-list">
-                <p class="loading-text">Loading history...</p>
-            </div>
+            <div id="history-list" class="history-list"></div>
         </div>
     </div>
 
