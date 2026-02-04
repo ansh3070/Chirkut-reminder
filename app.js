@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
     authDomain: "reminder-4f2f7.firebaseapp.com",
@@ -14,28 +13,33 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// --- STATE MANAGEMENT ---
+// ENABLE OFFLINE PERSISTENCE (Safe Mobile Use)
+enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", err.code));
+
 const USER_ID = "chirkut_user_001";
 
-// FIX 1: Use Local Time (YYYY-MM-DD) instead of UTC
-// 'en-CA' always outputs YYYY-MM-DD format in local timezone
-const getTodayStr = () => new Date().toLocaleDateString('en-CA');
+// --- FIX: MANUAL DATE CONSTRUCTION (No Timezone Issues) ---
+const getTodayStr = () => {
+    const d = new Date();
+    const year = d.getFullYear();
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${year}-${month}-${day}`;
+};
 
-// FIX 2: Dynamic Doc Reference (Always gets CURRENT day, not load day)
+// --- FIX: DYNAMIC REFERENCE ---
+// Always calls getTodayStr() instantly, so if it's 12:01 AM, it returns new date
 const getDocRef = () => doc(db, "users", USER_ID, "dailyLogs", getTodayStr());
 
-// Track current date to detect midnight switch
 let lastLoadedDate = getTodayStr();
 
-// --- DOM ELEMENTS ---
+// --- DOM ---
 const appContainer = document.getElementById('app-container');
 const loadingScreen = document.getElementById('loading-screen');
 const affirmationText = document.getElementById('affirmation-text');
 const dateBadge = document.getElementById('display-date');
 const streakBadge = document.getElementById('streak-badge');
 const streakCountSpan = streakBadge.querySelector('span');
-
-// Trackers
 const btnWater = document.getElementById('btn-water');
 const lblWaterCount = document.getElementById('water-count');
 const lblWaterTime = document.getElementById('water-last-time');
@@ -44,8 +48,6 @@ const lblMed = document.getElementById('med-status');
 const inpSleep = document.getElementById('sleep-input');
 const btnSleep = document.getElementById('btn-sleep');
 const lblSleep = document.getElementById('sleep-status');
-
-// Footer & Modals
 const btnHistory = document.getElementById('btn-history');
 const modalHistory = document.getElementById('history-modal');
 const closeHistory = document.getElementById('close-history');
@@ -64,24 +66,19 @@ const affirmations = [
 
 // --- INIT ---
 window.addEventListener('load', async () => {
-    if ('serviceWorker' in navigator) {
-        navigator.serviceWorker.register('./sw.js');
-    }
+    if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
 
-    // Set UI Date
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     startAffirmations();
 
     await loadTodayData();
     await checkStreak();
 
-    // Reveal App
     setTimeout(() => {
         loadingScreen.style.display = 'none';
         appContainer.classList.remove('hidden');
     }, 1500);
 
-    // Background Loop (Checks reminders AND midnight reset)
     setInterval(backgroundLoop, 60000);
 });
 
@@ -97,41 +94,29 @@ function startAffirmations() {
     }, 15000);
 }
 
-// --- DATA LOGIC ---
+// --- DATA ---
 async function loadTodayData() {
     try {
-        // ALWAYS use getDocRef() function to get fresh date
         const snap = await getDoc(getDocRef());
-        
         if (snap.exists()) {
             updateUI(snap.data());
         } else {
-            // It's a new day (or first time)! Create fresh doc.
             const initialData = {
-                waterCount: 0, 
-                lastWaterTime: Date.now(), 
-                medTaken: false, 
-                sleepHours: 0,
-                date: getTodayStr(), 
-                timestamp: Date.now()
+                waterCount: 0, lastWaterTime: null, medTaken: false, sleepHours: 0,
+                date: getTodayStr(), timestamp: Date.now()
             };
             await setDoc(getDocRef(), initialData);
-            updateUI(initialData); // UI will reset to 0 here
+            updateUI(initialData);
         }
-        
-        // Update our tracker
         lastLoadedDate = getTodayStr();
-        
     } catch (e) {
         console.error(e);
-        affirmationText.innerText = "Offline Mode (Check Console)";
+        affirmationText.innerText = "Offline Mode (Saved Locally)";
     }
 }
 
 function updateUI(data) {
     lblWaterCount.innerText = `${data.waterCount || 0} cups`;
-    
-    // Water Time
     if (data.lastWaterTime) {
         const d = new Date(data.lastWaterTime);
         lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
@@ -139,21 +124,14 @@ function updateUI(data) {
         lblWaterTime.innerText = "No water yet";
     }
 
-    // Meds
     if (data.medTaken) {
-        btnMed.innerText = "Taken ✔"; 
-        btnMed.classList.add('taken'); 
-        btnMed.disabled = true;
+        btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
         lblMed.innerText = "Good job! 💙";
     } else {
-        // Reset UI for new day
-        btnMed.innerText = "Mark Taken"; 
-        btnMed.classList.remove('taken'); 
-        btnMed.disabled = false;
+        btnMed.innerText = "Mark Taken"; btnMed.classList.remove('taken'); btnMed.disabled = false;
         lblMed.innerText = "Not taken";
     }
 
-    // Sleep
     if (data.sleepHours) {
         inpSleep.value = data.sleepHours;
         lblSleep.innerText = "Saved ✔";
@@ -163,13 +141,14 @@ function updateUI(data) {
     }
 }
 
-// --- BUTTON ACTIONS ---
+// --- BUTTONS (Fixed to use getDocRef) ---
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
     let count = parseInt(lblWaterCount.innerText) || 0;
     count++;
     lblWaterCount.innerText = `${count} cups`;
     
+    // Using getDocRef() ensures it writes to the CURRENT DATE
     await updateDoc(getDocRef(), { waterCount: count, lastWaterTime: now });
     
     const d = new Date(now);
@@ -181,7 +160,6 @@ btnWater.addEventListener('click', async () => {
 btnMed.addEventListener('click', async () => {
     btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
     lblMed.innerText = "Good job! 💙";
-    
     await updateDoc(getDocRef(), { medTaken: true });
     markActiveToday();
 });
@@ -190,31 +168,32 @@ btnSleep.addEventListener('click', async () => {
     const h = parseFloat(inpSleep.value);
     if (!h) return;
     lblSleep.innerText = "Saving...";
-    
     await updateDoc(getDocRef(), { sleepHours: h });
     lblSleep.innerText = "Saved ✔";
     markActiveToday();
 });
 
-// --- STREAK LOGIC ---
+// --- STREAK ---
 async function checkStreak() {
     const userDocRef = doc(db, "users", USER_ID);
     const snap = await getDoc(userDocRef);
     const today = getTodayStr();
-    
     let streak = 0;
     let lastActive = null;
 
     if (snap.exists()) {
-        const data = snap.data();
-        streak = data.streak || 0;
-        lastActive = data.lastActiveDate;
+        const d = snap.data();
+        streak = d.streak || 0;
+        lastActive = d.lastActiveDate;
     }
 
-    // Calculate Yesterday Correctly
-    const d = new Date();
-    d.setDate(d.getDate() - 1);
-    const yesterdayStr = d.toLocaleDateString('en-CA');
+    // Yesterday Logic (Manual)
+    const y = new Date();
+    y.setDate(y.getDate() - 1);
+    const yYear = y.getFullYear();
+    const yMonth = String(y.getMonth()+1).padStart(2,'0');
+    const yDay = String(y.getDate()).padStart(2,'0');
+    const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
 
     if (lastActive === today) updateStreakUI(streak, true);
     else if (lastActive === yesterdayStr) updateStreakUI(streak, false);
@@ -272,14 +251,12 @@ closeHistory.addEventListener('click', () => {
 
 async function renderHistoryList() {
     historyList.innerHTML = '<p style="text-align:center;">Loading...</p>';
-    
     try {
         const historyRef = collection(db, "users", USER_ID, "dailyLogs");
         const q = query(historyRef, orderBy("date", "desc"), limit(10));
         const snaps = await getDocs(q);
 
         historyList.innerHTML = "";
-        
         if (snaps.empty) {
             historyList.innerHTML = "<p style='text-align:center;'>No history yet.</p>";
             return;
@@ -292,10 +269,7 @@ async function renderHistoryList() {
             const div = document.createElement('div');
             div.className = 'history-item';
             div.innerHTML = `
-                <div class="h-info">
-                    <span class="h-date">${dateNice}</span>
-                    <span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span>
-                </div>
+                <div class="h-info"><span class="h-date">${dateNice}</span><span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span></div>
                 <button class="btn-delete" style="border:none; background:none; font-size:1.2rem;">🗑️</button>
             `;
             div.querySelector('.btn-delete').addEventListener('click', () => deleteEntry(d.date));
@@ -307,25 +281,24 @@ async function renderHistoryList() {
 }
 
 async function deleteEntry(dateStr) {
-    if(!confirm("Delete this?")) return;
+    if(!confirm("Delete this log?")) return;
     await deleteDoc(doc(db, "users", USER_ID, "dailyLogs", dateStr));
     await renderHistoryList(); 
 }
 
-// --- BACKGROUND LOOP (Notifications & Midnight Reset) ---
+// --- BACKGROUND CHECK (Midnight Reset) ---
 async function backgroundLoop() {
-    // 1. MIDNIGHT CHECK: Has the day changed since we loaded?
     const currentDay = getTodayStr();
+    
+    // MIDNIGHT RESET DETECTED
     if (currentDay !== lastLoadedDate) {
-        console.log("Midnight detected! Resetting UI...");
+        console.log("Midnight! Refreshing...");
         dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        await loadTodayData(); // This loads the NEW doc (empty) and resets UI
-        return; // Skip notifications this exact second
+        await loadTodayData(); 
+        return; 
     }
 
-    // 2. NOTIFICATIONS
     if (Notification.permission !== "granted") return;
-    
     const snap = await getDoc(getDocRef());
     if (!snap.exists()) return;
     
@@ -333,13 +306,11 @@ async function backgroundLoop() {
     const now = Date.now();
     const currentHour = new Date().getHours();
 
-    // Water (2 Hours)
     if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
         sendNotification("Kiddo, have some water! 💧", "You haven't drunk water in the past 2 hrs. Hydrate now!");
         await updateDoc(getDocRef(), { lastWaterTime: now }); 
     }
     
-    // Meds (10 PM / 22:00)
     if (currentHour === 22 && !data.medTaken) {
         const todayStr = getTodayStr();
         if (localStorage.getItem('med_notif') !== todayStr) {
@@ -348,7 +319,6 @@ async function backgroundLoop() {
         }
     }
     
-    // Sleep (11 PM / 23:00)
     if (currentHour === 23 && !data.sleepHours) {
         const todayStr = getTodayStr();
         if (localStorage.getItem('sleep_notif') !== todayStr) {
@@ -366,13 +336,12 @@ function sendNotification(title, body) {
     }
 }
 
-// Test Button
 btnTestNotif.addEventListener('click', () => {
     if (Notification.permission !== "granted") Notification.requestPermission();
     sendNotification("Chirkut Test 🔔", "This is how I will remind you!");
 });
 
-// --- INSTALL APP ---
+// INSTALL APP
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -389,3 +358,4 @@ btnInstall.addEventListener('click', async () => {
 window.addEventListener('appinstalled', () => {
     btnInstall.classList.add('hidden');
 });
+
