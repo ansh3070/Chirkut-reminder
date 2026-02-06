@@ -53,7 +53,7 @@ const closeHistory = document.getElementById('close-history');
 const historyList = document.getElementById('history-list');
 const btnTestNotif = document.getElementById('btn-test-notif');
 const btnInstall = document.getElementById('btn-install');
-const btnCalendar = document.getElementById('btn-calendar'); // Ensure this exists in HTML
+const btnCalendar = document.getElementById('btn-calendar');
 
 const affirmations = [
     "Your brain needs water to think clearly. Sip sip! 💧",
@@ -105,7 +105,6 @@ async function loadTodayData() {
             const initialData = {
                 waterCount: 0, lastWaterTime: null, medTaken: false, sleepHours: 0,
                 date: getTodayStr(), timestamp: Date.now(),
-                // Store regular notification status in cloud
                 notifsSent: { med: false, sleep: false }
             };
             await setDoc(getDocRef(), initialData);
@@ -283,11 +282,11 @@ async function deleteEntry(dateStr) {
     await renderHistoryList(); 
 }
 
-// --- BACKGROUND CHECK LOOP (The "Robot") ---
+// --- BACKGROUND CHECK (The "Brain") ---
 async function backgroundLoop() {
     const currentDay = getTodayStr();
     
-    // 1. Midnight Reset
+    // 1. Midnight Reset Check
     if (currentDay !== lastLoadedDate) {
         console.log("Midnight! Refreshing...");
         dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
@@ -295,40 +294,24 @@ async function backgroundLoop() {
         return; 
     }
 
-    // 2. CHECK FOR BROADCASTS (Admin Messages)
+    // 2. CHECK FOR ADMIN BROADCASTS
     try {
         const broadcastRef = doc(db, "broadcasts", "latest");
         const broadcastSnap = await getDoc(broadcastRef);
 
         if (broadcastSnap.exists()) {
             const msg = broadcastSnap.data();
-            
-            // We use LocalStorage here purely to remember "I have seen this specific message"
             const lastMsgTime = parseInt(localStorage.getItem('last_broadcast_id')) || 0;
             const now = Date.now();
 
-            // Is the message newer than the last one we saw?
-            // AND is it less than 24 hours old? (Don't show ancient news to new users)
             if (msg.timestamp > lastMsgTime && msg.timestamp > (now - 86400000)) {
-                
-                console.log("New System Broadcast Received:", msg.title);
-                
-                if (Notification.permission === "granted") {
-                    sendNotification(msg.title, msg.body);
-                } else {
-                    affirmationText.innerText = `📢 ${msg.title}: ${msg.body}`;
-                    setTimeout(() => startAffirmations(), 15000);
-                }
-                
-                // Mark this specific message timestamp as seen
+                if (Notification.permission === "granted") sendNotification(msg.title, msg.body);
                 localStorage.setItem('last_broadcast_id', msg.timestamp);
             }
         }
-    } catch (e) {
-        console.log("Broadcast check silent fail");
-    }
+    } catch (e) { /* Ignore offline errors */ }
 
-    // 3. REGULAR REMINDERS (Water, Meds, Sleep)
+    // 3. PERSONAL REMINDERS
     if (Notification.permission !== "granted") return;
     const snap = await getDoc(getDocRef());
     if (!snap.exists()) return;
@@ -337,13 +320,28 @@ async function backgroundLoop() {
     const now = Date.now();
     const currentHour = new Date().getHours();
 
-    // Water
-    if (currentHour >= 7 && data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
+    // --- QUIET HOURS GUARD (12 AM - 6 AM) ---
+    // If it is midnight (0), 1 AM, 2 AM, 3 AM, 4 AM, 5 AM... DO NOTHING.
+    if (currentHour >= 0 && currentHour < 6) {
+        return; // STOP HERE. Don't check water, meds, or sleep.
+    }
+
+    // --- WATER LOGIC (Fixed for "First Sip") ---
+    // Rule 1: Normal Reminder (Gap > 2 hours)
+    if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
         sendNotification("Kiddo, have some water! 💧", "Hydrate now!");
         await updateDoc(getDocRef(), { lastWaterTime: now }); 
     }
+    // Rule 2: First Sip Check (If 0 cups & it's past 9 AM)
+    // This catches the case where 'lastWaterTime' is null
+    else if (data.waterCount === 0 && currentHour >= 9) {
+        // Only send if we haven't bugged them recently (using a temp lastWaterTime for today)
+        // If lastWaterTime is null, set it to 'now' so we remind them, but don't spam instantly again
+        sendNotification("Good morning! ☀️", "Start your day with a glass of water 💧");
+        await updateDoc(getDocRef(), { lastWaterTime: now }); 
+    }
     
-    // Meds
+    // --- MEDS LOGIC ---
     if (currentHour === 22 && !data.medTaken) {
         if (!data.notifsSent || !data.notifsSent.med) {
             sendNotification("Medicine Reminder 💊", "Please take your meds now!");
@@ -351,7 +349,7 @@ async function backgroundLoop() {
         }
     }
     
-    // Sleep
+    // --- SLEEP LOGIC ---
     if (currentHour === 23 && !data.sleepHours) {
         if (!data.notifsSent || !data.notifsSent.sleep) {
             sendNotification("Go to sleep, kiddo 😴", "It's late.");
@@ -368,7 +366,6 @@ function sendNotification(title, body) {
     }
 }
 
-// --- CALENDAR LOGIC (Optional) ---
 if (btnCalendar) {
     btnCalendar.addEventListener('click', () => {
         const medLink = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Medicine+Reminder+💊&details=Time+for+self-care!&dates=20240201T220000/20240201T221500&recur=RRULE:FREQ=DAILY";
@@ -386,7 +383,6 @@ btnTestNotif.addEventListener('click', () => {
     sendNotification("Chirkut Test 🔔", "This is how I will remind you!");
 });
 
-// INSTALL APP
 let deferredPrompt;
 window.addEventListener('beforeinstallprompt', (e) => {
     e.preventDefault();
@@ -403,3 +399,4 @@ btnInstall.addEventListener('click', async () => {
 window.addEventListener('appinstalled', () => {
     btnInstall.classList.add('hidden');
 });
+
