@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Chirkut Admin ⚡</title>
+    <link rel="stylesheet" href="admin.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
+</head>
+<body>
+
+    <div class="admin-container">
+        <header>
+            <h1>Admin Control ⚡</h1>
+            <p class="status">Connected to Chirkut DB</p>
+        </header>
+
+        <main>
+            <div class="card">
+                <h2>Send Custom Notification</h2>
+                
+                <div class="input-group">
+                    <label>Title</label>
+                    <input type="text" id="msg-title" placeholder="e.g., Hello Kiddo! 👋">
+                </div>
+
+                <div class="input-group">
+                    <label>Message Body</label>
+                    <textarea id="msg-body" rows="4" placeholder="e.g., Don't forget to smile today..."></textarea>
+                </div>
+
+                <button id="btn-send" class="btn-primary">
+                    🚀 Send Notification
+                </button>
+                
+                <p id="feedback" class="feedback"></p>
+            </div>
+        </main>
+    </div>
+
+    <script type="module" src="admin.js"></script>
+</body>
+</html>
