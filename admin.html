@@ -7,7 +7,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
     
     <style>
-        /* --- CSS STYLES --- */
+        /* --- DARK THEME CSS --- */
         :root {
             --bg-color: #1a1a2e;
             --card-bg: #16213e;
@@ -28,16 +28,8 @@
             padding: 20px;
         }
 
-        .admin-container {
-            width: 100%;
-            max-width: 500px;
-        }
-
-        header {
-            margin-bottom: 30px;
-            text-align: center;
-        }
-
+        .admin-container { width: 100%; max-width: 500px; }
+        header { margin-bottom: 30px; text-align: center; }
         h1 { font-weight: 800; color: var(--accent); }
         .status { color: #4cd137; font-size: 0.9rem; font-weight: 600; margin-top: 5px; }
 
@@ -49,47 +41,27 @@
         }
 
         h2 { margin-bottom: 20px; font-size: 1.2rem; }
-
         .input-group { margin-bottom: 20px; }
         label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: #a0a0a0; }
 
         input, textarea {
-            width: 100%;
-            padding: 12px;
-            background: var(--input-bg);
-            border: 1px solid #2a2a4e;
-            border-radius: 8px;
-            color: white;
-            font-family: inherit;
-            font-size: 1rem;
-            outline: none;
-            transition: border 0.3s;
+            width: 100%; padding: 12px; background: var(--input-bg);
+            border: 1px solid #2a2a4e; border-radius: 8px; color: white;
+            font-family: inherit; font-size: 1rem; outline: none; transition: border 0.3s;
         }
-
         input:focus, textarea:focus { border-color: var(--accent); }
 
         .btn-primary {
-            width: 100%;
-            padding: 15px;
-            background: var(--accent);
-            color: white;
-            border: none;
-            border-radius: 8px;
-            font-weight: 800;
-            font-size: 1rem;
-            cursor: pointer;
-            transition: transform 0.1s;
+            width: 100%; padding: 15px; background: var(--accent);
+            color: white; border: none; border-radius: 8px; font-weight: 800;
+            font-size: 1rem; cursor: pointer; transition: transform 0.1s;
         }
-
         .btn-primary:active { transform: scale(0.98); }
         .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
 
         .feedback {
-            margin-top: 15px;
-            text-align: center;
-            font-size: 0.9rem;
-            min-height: 20px;
-            font-weight: 600;
+            margin-top: 15px; text-align: center; font-size: 0.9rem;
+            min-height: 20px; font-weight: 600;
         }
         .success { color: #4cd137; }
         .error { color: #ff6b6b; }
@@ -100,16 +72,16 @@
     <div class="admin-container">
         <header>
             <h1>Admin Control ⚡</h1>
-            <p class="status">● Connected to Chirkut DB</p>
+            <p class="status">● Connected to Global Broadcast</p>
         </header>
 
         <main>
             <div class="card">
-                <h2>Send Custom Notification</h2>
+                <h2>Send System Broadcast</h2>
                 
                 <div class="input-group">
                     <label>Title</label>
-                    <input type="text" id="msg-title" placeholder="e.g., Hello Kiddo! 👋">
+                    <input type="text" id="msg-title" placeholder="e.g., Hello Everyone! 👋">
                 </div>
 
                 <div class="input-group">
@@ -118,7 +90,7 @@
                 </div>
 
                 <button id="btn-send" class="btn-primary">
-                    🚀 Send Notification
+                    🚀 Broadcast to All
                 </button>
                 
                 <p id="feedback" class="feedback"></p>
@@ -130,7 +102,7 @@
         import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
         import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-        // --- FIREBASE CONFIGURATION ---
+        // YOUR FIREBASE CONFIG
         const firebaseConfig = {
             apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
             authDomain: "reminder-4f2f7.firebaseapp.com",
@@ -142,15 +114,14 @@
 
         const app = initializeApp(firebaseConfig);
         const db = getFirestore(app);
-        const USER_ID = "chirkut_user_001";
 
-        // --- DOM ELEMENTS ---
+        // DOM Elements
         const titleInput = document.getElementById('msg-title');
         const bodyInput = document.getElementById('msg-body');
         const sendBtn = document.getElementById('btn-send');
         const feedback = document.getElementById('feedback');
 
-        // --- SEND LOGIC ---
+        // --- BROADCAST LOGIC ---
         sendBtn.addEventListener('click', async () => {
             const title = titleInput.value.trim();
             const body = bodyInput.value.trim();
@@ -160,24 +131,20 @@
                 return;
             }
 
-            // Disable button while sending
+            // Lock Button
             sendBtn.disabled = true;
-            sendBtn.innerText = "Sending...";
+            sendBtn.innerText = "Broadcasting...";
 
             try {
-                // Write to the 'mailbox' document
-                const mailboxRef = doc(db, "users", USER_ID, "notifications", "latest");
-                
-                await setDoc(mailboxRef, {
+                // WRITE TO GLOBAL BROADCAST COLLECTION
+                // We overwrite the 'latest' doc so all users see this specific message
+                await setDoc(doc(db, "broadcasts", "latest"), {
                     title: title,
                     body: body,
-                    timestamp: Date.now(), // timestamp helps main app detect NEW messages
-                    read: false
+                    timestamp: Date.now() // Critical: Used by app.js to detect newness
                 });
 
-                showFeedback("✅ Notification Sent Successfully!", "success");
-                
-                // Clear inputs
+                showFeedback("✅ Broadcast Sent to ALL Users!", "success");
                 titleInput.value = "";
                 bodyInput.value = "";
                 
@@ -186,20 +153,17 @@
                 showFeedback("❌ Error: " + error.message, "error");
             }
 
-            // Re-enable button
+            // Unlock Button
             sendBtn.disabled = false;
-            sendBtn.innerText = "🚀 Send Notification";
+            sendBtn.innerText = "🚀 Broadcast to All";
         });
 
         function showFeedback(msg, type) {
             feedback.innerText = msg;
             feedback.className = "feedback " + type;
-            
-            // Clear message after 3 seconds
-            setTimeout(() => {
-                feedback.innerText = "";
-            }, 3000);
+            setTimeout(() => feedback.innerText = "", 3000);
         }
     </script>
 </body>
 </html>
+
