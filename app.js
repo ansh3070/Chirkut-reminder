@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
+// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
     authDomain: "reminder-4f2f7.firebaseapp.com",
@@ -13,12 +14,12 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// ENABLE OFFLINE PERSISTENCE (Safe Mobile Use)
+// Enable Offline Persistence (Keeps data safe if internet cuts out)
 enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", err.code));
 
 const USER_ID = "chirkut_user_001";
 
-// --- FIX: MANUAL DATE CONSTRUCTION (No Timezone Issues) ---
+// --- DATE HELPER (Fixes Timezone Issues) ---
 const getTodayStr = () => {
     const d = new Date();
     const year = d.getFullYear();
@@ -27,19 +28,19 @@ const getTodayStr = () => {
     return `${year}-${month}-${day}`;
 };
 
-// --- FIX: DYNAMIC REFERENCE ---
-// Always calls getTodayStr() instantly, so if it's 12:01 AM, it returns new date
+// Always points to TODAY'S document
 const getDocRef = () => doc(db, "users", USER_ID, "dailyLogs", getTodayStr());
 
 let lastLoadedDate = getTodayStr();
 
-// --- DOM ---
+// --- DOM ELEMENTS ---
 const appContainer = document.getElementById('app-container');
 const loadingScreen = document.getElementById('loading-screen');
 const affirmationText = document.getElementById('affirmation-text');
 const dateBadge = document.getElementById('display-date');
 const streakBadge = document.getElementById('streak-badge');
 const streakCountSpan = streakBadge.querySelector('span');
+
 const btnWater = document.getElementById('btn-water');
 const lblWaterCount = document.getElementById('water-count');
 const lblWaterTime = document.getElementById('water-last-time');
@@ -48,12 +49,14 @@ const lblMed = document.getElementById('med-status');
 const inpSleep = document.getElementById('sleep-input');
 const btnSleep = document.getElementById('btn-sleep');
 const lblSleep = document.getElementById('sleep-status');
+
 const btnHistory = document.getElementById('btn-history');
 const modalHistory = document.getElementById('history-modal');
 const closeHistory = document.getElementById('close-history');
 const historyList = document.getElementById('history-list');
 const btnTestNotif = document.getElementById('btn-test-notif');
 const btnInstall = document.getElementById('btn-install');
+const btnCalendar = document.getElementById('btn-calendar');
 
 const affirmations = [
     "Your brain needs water to think clearly. Sip sip! 💧",
@@ -79,6 +82,7 @@ window.addEventListener('load', async () => {
         appContainer.classList.remove('hidden');
     }, 1500);
 
+    // Check every minute
     setInterval(backgroundLoop, 60000);
 });
 
@@ -94,16 +98,26 @@ function startAffirmations() {
     }, 15000);
 }
 
-// --- DATA ---
+// --- DATA LOGIC ---
 async function loadTodayData() {
     try {
         const snap = await getDoc(getDocRef());
         if (snap.exists()) {
             updateUI(snap.data());
         } else {
+            // New Day: Initialize with "notification flags" inside the DB
             const initialData = {
-                waterCount: 0, lastWaterTime: null, medTaken: false, sleepHours: 0,
-                date: getTodayStr(), timestamp: Date.now()
+                waterCount: 0, 
+                lastWaterTime: null, 
+                medTaken: false, 
+                sleepHours: 0,
+                date: getTodayStr(), 
+                timestamp: Date.now(),
+                // NEW: Store notification status in Firebase so it persists 24/7
+                notifsSent: {
+                    med: false,
+                    sleep: false
+                }
             };
             await setDoc(getDocRef(), initialData);
             updateUI(initialData);
@@ -111,11 +125,12 @@ async function loadTodayData() {
         lastLoadedDate = getTodayStr();
     } catch (e) {
         console.error(e);
-        affirmationText.innerText = "Offline Mode (Saved Locally)";
+        affirmationText.innerText = "Offline Mode";
     }
 }
 
 function updateUI(data) {
+    // Water
     lblWaterCount.innerText = `${data.waterCount || 0} cups`;
     if (data.lastWaterTime) {
         const d = new Date(data.lastWaterTime);
@@ -124,6 +139,7 @@ function updateUI(data) {
         lblWaterTime.innerText = "No water yet";
     }
 
+    // Meds
     if (data.medTaken) {
         btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
         lblMed.innerText = "Good job! 💙";
@@ -132,6 +148,7 @@ function updateUI(data) {
         lblMed.innerText = "Not taken";
     }
 
+    // Sleep
     if (data.sleepHours) {
         inpSleep.value = data.sleepHours;
         lblSleep.innerText = "Saved ✔";
@@ -141,19 +158,17 @@ function updateUI(data) {
     }
 }
 
-// --- BUTTONS (Fixed to use getDocRef) ---
+// --- BUTTONS ---
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
     let count = parseInt(lblWaterCount.innerText) || 0;
     count++;
     lblWaterCount.innerText = `${count} cups`;
     
-    // Using getDocRef() ensures it writes to the CURRENT DATE
     await updateDoc(getDocRef(), { waterCount: count, lastWaterTime: now });
     
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
-    
     markActiveToday(); 
 });
 
@@ -173,7 +188,7 @@ btnSleep.addEventListener('click', async () => {
     markActiveToday();
 });
 
-// --- STREAK ---
+// --- STREAK LOGIC ---
 async function checkStreak() {
     const userDocRef = doc(db, "users", USER_ID);
     const snap = await getDoc(userDocRef);
@@ -187,13 +202,9 @@ async function checkStreak() {
         lastActive = d.lastActiveDate;
     }
 
-    // Yesterday Logic (Manual)
     const y = new Date();
     y.setDate(y.getDate() - 1);
-    const yYear = y.getFullYear();
-    const yMonth = String(y.getMonth()+1).padStart(2,'0');
-    const yDay = String(y.getDate()).padStart(2,'0');
-    const yesterdayStr = `${yYear}-${yMonth}-${yDay}`;
+    const yesterdayStr = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
 
     if (lastActive === today) updateStreakUI(streak, true);
     else if (lastActive === yesterdayStr) updateStreakUI(streak, false);
@@ -286,18 +297,36 @@ async function deleteEntry(dateStr) {
     await renderHistoryList(); 
 }
 
-// --- BACKGROUND CHECK (Midnight Reset) ---
+// --- BACKGROUND CHECK (Powered by Firebase Logic) ---
 async function backgroundLoop() {
     const currentDay = getTodayStr();
     
-    // MIDNIGHT RESET DETECTED
+    // 1. Midnight Reset Check
     if (currentDay !== lastLoadedDate) {
-        console.log("Midnight! Refreshing...");
+        console.log("Midnight detected. Refreshing data...");
         dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
         await loadTodayData(); 
         return; 
     }
 
+    // 2. CHECK FOR ADMIN MESSAGES (Mailbox)
+    try {
+        const mailboxRef = doc(db, "users", USER_ID, "notifications", "latest");
+        const mailSnap = await getDoc(mailboxRef);
+
+        if (mailSnap.exists()) {
+            const mail = mailSnap.data();
+            // Store "last seen message time" in DB or LocalStorage (hybrid is okay for read-status)
+            const lastMsgTime = localStorage.getItem('last_msg_time');
+            
+            if (mail.timestamp > (Date.now() - 60000) && (!lastMsgTime || mail.timestamp > parseInt(lastMsgTime))) {
+                if (Notification.permission === "granted") sendNotification(mail.title, mail.body);
+                localStorage.setItem('last_msg_time', mail.timestamp);
+            }
+        }
+    } catch (e) { /* Ignore offline errors */ }
+
+    // 3. REGULAR REMINDERS (Using Firebase Data Flags)
     if (Notification.permission !== "granted") return;
     const snap = await getDoc(getDocRef());
     if (!snap.exists()) return;
@@ -306,24 +335,27 @@ async function backgroundLoop() {
     const now = Date.now();
     const currentHour = new Date().getHours();
 
-    if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
-        sendNotification("Kiddo, have some water! 💧", "You haven't drunk water in the past 2 hrs. Hydrate now!");
+    // -- Water --
+    if (currentHour >= 7 && data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
+        sendNotification("Kiddo, have some water! 💧", "Hydrate now!");
         await updateDoc(getDocRef(), { lastWaterTime: now }); 
     }
     
+    // -- Meds (Uses DB flag 'notifsSent.med' instead of LocalStorage) --
     if (currentHour === 22 && !data.medTaken) {
-        const todayStr = getTodayStr();
-        if (localStorage.getItem('med_notif') !== todayStr) {
+        // Check if we already sent the notification today via DB
+        if (!data.notifsSent || !data.notifsSent.med) {
             sendNotification("Medicine Reminder 💊", "Please take your meds now!");
-            localStorage.setItem('med_notif', todayStr);
+            // Mark as sent in Firebase so we don't send again
+            await updateDoc(getDocRef(), { "notifsSent.med": true });
         }
     }
     
+    // -- Sleep (Uses DB flag 'notifsSent.sleep') --
     if (currentHour === 23 && !data.sleepHours) {
-        const todayStr = getTodayStr();
-        if (localStorage.getItem('sleep_notif') !== todayStr) {
-            sendNotification("Go to sleep, kiddo 😴", "It's late. Get some rest.");
-            localStorage.setItem('sleep_notif', todayStr);
+        if (!data.notifsSent || !data.notifsSent.sleep) {
+            sendNotification("Go to sleep, kiddo 😴", "It's late.");
+            await updateDoc(getDocRef(), { "notifsSent.sleep": true });
         }
     }
 }
@@ -334,6 +366,19 @@ function sendNotification(title, body) {
     } else {
         new Notification(title, { body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
     }
+}
+
+// --- CALENDAR BUTTON ---
+if (btnCalendar) {
+    btnCalendar.addEventListener('click', () => {
+        const medLink = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Medicine+Reminder+💊&details=Time+for+self-care!&dates=20240201T220000/20240201T221500&recur=RRULE:FREQ=DAILY";
+        const sleepLink = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Go+to+Sleep+😴&details=Put+the+phone+away.&dates=20240201T230000/20240201T233000&recur=RRULE:FREQ=DAILY";
+
+        if(confirm("Open Google Calendar to set permanent alarms?")) {
+            window.open(medLink, '_blank');
+            setTimeout(() => { if(confirm("Add Sleep Reminder too?")) window.open(sleepLink, '_blank'); }, 1000);
+        }
+    });
 }
 
 btnTestNotif.addEventListener('click', () => {
