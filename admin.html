@@ -2,166 +2,184 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chirkut Admin ⚡</title>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;800&display=swap" rel="stylesheet">
-    
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Admin Panel | Evo Centsprep</title>
+    <link href="https://cdn.quilljs.com/1.3.6/quill.snow.css" rel="stylesheet">
     <style>
-        /* --- DARK THEME CSS --- */
-        :root {
-            --bg-color: #1a1a2e;
-            --card-bg: #16213e;
-            --text-main: #ffffff;
-            --accent: #e94560;
-            --input-bg: #0f3460;
-        }
+        :root { --font: 'Inter', sans-serif; --accent: #2563eb; --bg: #f8fafc; }
+        body { font-family: var(--font); background: var(--bg); margin: 0; padding: 15px; color: #1e293b; }
+        
+        .container { max-width: 800px; margin: 0 auto; background: white; padding: 25px; border-radius: 12px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        
+        /* Mode Switcher */
+        .mode-switch { display: flex; gap: 10px; margin-bottom: 20px; background: #f1f5f9; pading: 5px; border-radius: 8px; }
+        .mode-btn { flex: 1; padding: 12px; text-align: center; cursor: pointer; border-radius: 6px; font-weight: 600; color: #64748b; }
+        .mode-btn.active { background: white; color: var(--accent); box-shadow: 0 2px 4px rgba(0,0,0,0.05); }
 
-        * { box-sizing: border-box; margin: 0; padding: 0; }
-
-        body {
-            background-color: var(--bg-color);
-            font-family: 'Inter', sans-serif;
-            color: var(--text-main);
-            display: flex;
-            justify-content: center;
-            min-height: 100vh;
-            padding: 20px;
-        }
-
-        .admin-container { width: 100%; max-width: 500px; }
-        header { margin-bottom: 30px; text-align: center; }
-        h1 { font-weight: 800; color: var(--accent); }
-        .status { color: #4cd137; font-size: 0.9rem; font-weight: 600; margin-top: 5px; }
-
-        .card {
-            background: var(--card-bg);
-            padding: 25px;
-            border-radius: 15px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-        }
-
-        h2 { margin-bottom: 20px; font-size: 1.2rem; }
-        .input-group { margin-bottom: 20px; }
-        label { display: block; margin-bottom: 8px; font-size: 0.9rem; color: #a0a0a0; }
-
-        input, textarea {
-            width: 100%; padding: 12px; background: var(--input-bg);
-            border: 1px solid #2a2a4e; border-radius: 8px; color: white;
-            font-family: inherit; font-size: 1rem; outline: none; transition: border 0.3s;
-        }
-        input:focus, textarea:focus { border-color: var(--accent); }
-
-        .btn-primary {
-            width: 100%; padding: 15px; background: var(--accent);
-            color: white; border: none; border-radius: 8px; font-weight: 800;
-            font-size: 1rem; cursor: pointer; transition: transform 0.1s;
-        }
-        .btn-primary:active { transform: scale(0.98); }
-        .btn-primary:disabled { opacity: 0.7; cursor: not-allowed; }
-
-        .feedback {
-            margin-top: 15px; text-align: center; font-size: 0.9rem;
-            min-height: 20px; font-weight: 600;
-        }
-        .success { color: #4cd137; }
-        .error { color: #ff6b6b; }
+        input, select { width: 100%; padding: 12px; margin-bottom: 15px; border: 1px solid #cbd5e1; border-radius: 8px; background: #fff; }
+        label { font-weight: 600; font-size: 0.9rem; display: block; margin-bottom: 5px; color: #475569; }
+        
+        #editor-container { height: 300px; margin-bottom: 20px; background: white; }
+        
+        button.action-btn { background: var(--accent); color: white; padding: 14px; border: none; border-radius: 8px; font-size: 1rem; font-weight: 600; width: 100%; cursor: pointer; }
+        
+        .hidden { display: none; }
+        .success { background: #dcfce7; color: #166534; padding: 15px; border-radius: 6px; margin-bottom: 20px; display: none; text-align: center; }
     </style>
 </head>
 <body>
 
-    <div class="admin-container">
-        <header>
-            <h1>Admin Control ⚡</h1>
-            <p class="status">● Connected to Global Broadcast</p>
-        </header>
+    <div class="container">
+        <div id="login-section">
+            <h2 style="text-align:center">Admin Login</h2>
+            <input type="email" id="email" placeholder="Email" value="ansh20bsp@gmail.com">
+            <input type="password" id="password" placeholder="Password">
+            <button class="action-btn" onclick="login()">Log In</button>
+            <p id="login-error" style="color:red; text-align:center;"></p>
+        </div>
 
-        <main>
-            <div class="card">
-                <h2>Send System Broadcast</h2>
-                
-                <div class="input-group">
-                    <label>Title</label>
-                    <input type="text" id="msg-title" placeholder="e.g., Hello Everyone! 👋">
-                </div>
-
-                <div class="input-group">
-                    <label>Message Body</label>
-                    <textarea id="msg-body" rows="4" placeholder="e.g., Don't forget to smile today..."></textarea>
-                </div>
-
-                <button id="btn-send" class="btn-primary">
-                    🚀 Broadcast to All
-                </button>
-                
-                <p id="feedback" class="feedback"></p>
+        <div id="dashboard-section" class="hidden">
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+                <h2 style="margin:0">Dashboard</h2>
+                <button onclick="logout()" style="background:#fee2e2; color:#ef4444; border:none; padding:5px 10px; border-radius:4px;">Logout</button>
             </div>
-        </main>
+
+            <div class="mode-switch">
+                <div class="mode-btn active" onclick="setMode('note')" id="btn-note">📝 Post Note</div>
+                <div class="mode-btn" onclick="setMode('syllabus')" id="btn-syllabus">📚 Post Syllabus</div>
+            </div>
+
+            <p class="success" id="success-msg">✅ Saved successfully!</p>
+
+            <label>Subject</label>
+            <select id="subjectId">
+                <option value="physics">Physics</option>
+                <option value="chem">Chemistry</option>
+                <option value="maths">Mathematics</option>
+                <option value="bio">Biology</option>
+                <option value="logical">Logical Reasoning</option>
+            </select>
+
+            <div id="note-fields">
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1"><label>Day #</label><input type="text" id="day" placeholder="Day 1"></div>
+                    <div style="flex:1"><label>Date</label><input type="date" id="date"></div>
+                </div>
+            </div>
+
+            <div id="syllabus-fields" class="hidden">
+                <div style="display:flex; gap:10px;">
+                    <div style="flex:1"><label>Chapter #</label><input type="number" id="chapNo" placeholder="1"></div>
+                </div>
+                <label>YouTube Search Term (Copy-Paste helper)</label>
+                <input type="text" id="ytSearch" placeholder="e.g. Kinematics one shot physics">
+            </div>
+
+            <label>Title</label>
+            <input type="text" id="title" placeholder="Title">
+
+            <div id="preview-field">
+                <label>Short Preview</label>
+                <input type="text" id="preview" placeholder="Short summary...">
+            </div>
+
+            <label>Content</label>
+            <div id="editor-container"></div>
+
+            <button class="action-btn" onclick="saveData()" id="save-btn">Publish Note</button>
+        </div>
     </div>
 
+    <script src="https://cdn.quilljs.com/1.3.6/quill.js"></script>
     <script type="module">
-        import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-        import { getFirestore, doc, setDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+        import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
+        import { getAuth, signInWithEmailAndPassword, onAuthStateChanged, signOut } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-auth.js";
+        import { getFirestore, collection, addDoc, serverTimestamp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
-        // --- YOUR FIREBASE CONFIG (MUST BE HERE) ---
         const firebaseConfig = {
-            apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
-            authDomain: "reminder-4f2f7.firebaseapp.com",
-            projectId: "reminder-4f2f7",
-            storageBucket: "reminder-4f2f7.firebasestorage.app",
-            messagingSenderId: "283593484172",
-            appId: "1:283593484172:web:6530e100a16f4839f2d8a9"
+            apiKey: "AIzaSyBVnmRt1vLzJy9FRlrq2J9-4VdnC_RGXWM",
+            authDomain: "centsprep.firebaseapp.com",
+            projectId: "centsprep",
+            storageBucket: "centsprep.firebasestorage.app",
+            messagingSenderId: "747487498628",
+            appId: "1:747487498628:web:0ee15720e248cd30a04dd1",
+            measurementId: "G-CNXRHV0P33"
         };
 
         const app = initializeApp(firebaseConfig);
+        const auth = getAuth(app);
         const db = getFirestore(app);
+        let currentMode = 'note';
 
-        // DOM Elements
-        const titleInput = document.getElementById('msg-title');
-        const bodyInput = document.getElementById('msg-body');
-        const sendBtn = document.getElementById('btn-send');
-        const feedback = document.getElementById('feedback');
-
-        // --- BROADCAST LOGIC ---
-        sendBtn.addEventListener('click', async () => {
-            const title = titleInput.value.trim();
-            const body = bodyInput.value.trim();
-
-            if (!title || !body) {
-                showFeedback("❌ Please fill in both fields", "error");
-                return;
-            }
-
-            // Lock Button
-            sendBtn.disabled = true;
-            sendBtn.innerText = "Broadcasting...";
-
-            try {
-                // WRITE TO GLOBAL BROADCAST COLLECTION
-                // We overwrite the 'latest' doc so all users see this specific message
-                await setDoc(doc(db, "broadcasts", "latest"), {
-                    title: title,
-                    body: body,
-                    timestamp: Date.now() // Critical: Used by app.js to detect newness
-                });
-
-                showFeedback("✅ Broadcast Sent to ALL Users!", "success");
-                titleInput.value = "";
-                bodyInput.value = "";
-                
-            } catch (error) {
-                console.error(error);
-                showFeedback("❌ Error: " + error.message, "error");
-            }
-
-            // Unlock Button
-            sendBtn.disabled = false;
-            sendBtn.innerText = "🚀 Broadcast to All";
+        var quill = new Quill('#editor-container', {
+            theme: 'snow',
+            modules: { toolbar: [[{ 'header': [2, 3, false] }], ['bold', 'italic', 'underline', 'list']] }
         });
 
-        function showFeedback(msg, type) {
-            feedback.innerText = msg;
-            feedback.className = "feedback " + type;
-            setTimeout(() => feedback.innerText = "", 3000);
+        // Toggle Logic
+        window.setMode = (mode) => {
+            currentMode = mode;
+            document.querySelectorAll('.mode-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById('btn-' + mode).classList.add('active');
+            
+            if(mode === 'note') {
+                document.getElementById('note-fields').classList.remove('hidden');
+                document.getElementById('syllabus-fields').classList.add('hidden');
+                document.getElementById('preview-field').classList.remove('hidden');
+                document.getElementById('save-btn').innerText = "Publish Note";
+            } else {
+                document.getElementById('note-fields').classList.add('hidden');
+                document.getElementById('syllabus-fields').classList.remove('hidden');
+                document.getElementById('preview-field').classList.add('hidden');
+                document.getElementById('save-btn').innerText = "Publish Syllabus Chapter";
+            }
+        }
+
+        window.login = () => {
+            signInWithEmailAndPassword(auth, document.getElementById('email').value, document.getElementById('password').value)
+            .catch(e => document.getElementById('login-error').innerText = e.message);
+        }
+
+        onAuthStateChanged(auth, u => {
+            document.getElementById('login-section').classList.toggle('hidden', !!u);
+            document.getElementById('dashboard-section').classList.toggle('hidden', !u);
+        });
+
+        window.saveData = async () => {
+            const btn = document.getElementById('save-btn');
+            btn.disabled = true; btn.innerText = "Saving...";
+            
+            try {
+                const common = {
+                    subjectId: document.getElementById('subjectId').value,
+                    title: document.getElementById('title').value,
+                    content: quill.root.innerHTML,
+                    createdAt: serverTimestamp()
+                };
+
+                if(currentMode === 'note') {
+                    await addDoc(collection(db, "notes"), {
+                        ...common,
+                        day: document.getElementById('day').value,
+                        date: document.getElementById('date').value,
+                        preview: document.getElementById('preview').value
+                    });
+                } else {
+                    await addDoc(collection(db, "syllabus"), {
+                        ...common,
+                        chapNo: parseInt(document.getElementById('chapNo').value),
+                        ytSearch: document.getElementById('ytSearch').value
+                    });
+                }
+
+                document.getElementById('success-msg').style.display = 'block';
+                setTimeout(() => document.getElementById('success-msg').style.display = 'none', 2000);
+                document.getElementById('title').value = "";
+                quill.setContents([]);
+
+            } catch(e) { alert(e.message); }
+            
+            btn.disabled = false; btn.innerText = currentMode === 'note' ? "Publish Note" : "Publish Syllabus Chapter";
         }
     </script>
 </body>
