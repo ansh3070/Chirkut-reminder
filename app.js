@@ -14,8 +14,16 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", err.code));
 
-const USER_ID = "chirkut_user_001"; // Tracker ID
-let MY_NAME = localStorage.getItem('chirkut_username'); // Identity ID
+const USER_ID = "chirkut_user_001";
+
+// --- MEMORY RESET FIX ---
+// This deletes the old names (Ansh/Harshita) so the gateway asks for Zenitsu/Nezuko
+let currentSavedName = localStorage.getItem('chirkut_username');
+if (currentSavedName === "Ansh" || currentSavedName === "Harshita") {
+    localStorage.removeItem('chirkut_username');
+    currentSavedName = null;
+}
+let MY_NAME = currentSavedName;
 
 // --- DATE HELPER ---
 const getTodayStr = () => {
@@ -128,7 +136,7 @@ let tapCount = 0;
 secretLogo.addEventListener('click', () => {
     tapCount++;
     if (tapCount === 5) {
-        alert("A secret message for you: I see how hard you're trying, and I'm so incredibly proud of you. You've got this! 💙");
+        alert("A secret message for Nezuko: I see how hard you're trying, and I'm so incredibly proud of you. You've got this! 🌸");
         triggerConfetti();
         tapCount = 0;
     }
@@ -146,14 +154,17 @@ function startAffirmations() {
     }, 15000);
 }
 
-// --- COZY: GESTURES & CHAT LOGIC ---
+// --- BUG FIX: COZY MODAL BUTTON ---
 btnCozy.addEventListener('click', () => {
     modalCozy.classList.remove('hidden');
+    // Scroll chat to bottom when opened
     setTimeout(() => { chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
 });
-closeCozy.addEventListener('click', () => modalCozy.classList.add('hidden'));
+closeCozy.addEventListener('click', () => {
+    modalCozy.classList.add('hidden');
+});
 
-// Send Gesture
+// --- GESTURES LOGIC ---
 gestureBtns.forEach(btn => {
     btn.addEventListener('click', async (e) => {
         const type = e.target.getAttribute('data-type');
@@ -175,7 +186,6 @@ gestureBtns.forEach(btn => {
     });
 });
 
-// Listen for Gestures
 function listenForGestures() {
     onSnapshot(doc(db, "cozy_room", "latest_gesture"), (docSnap) => {
         if (docSnap.exists()) {
@@ -183,10 +193,8 @@ function listenForGestures() {
             const lastGestureTime = parseInt(localStorage.getItem('last_gesture_time')) || 0;
             const now = Date.now();
 
-            // If it's a NEW gesture, sent in the last 24hrs, AND NOT sent by me
             if (data.timestamp > lastGestureTime && data.timestamp > (now - 86400000) && data.sender !== MY_NAME) {
                 
-                // Show Sweet Popup
                 popupEmoji.innerText = data.emoji;
                 popupText.innerText = `${data.sender} sent ${data.text}!`;
                 sweetPopup.classList.remove('hidden');
@@ -201,7 +209,7 @@ function listenForGestures() {
     });
 }
 
-// Send Chat
+// --- CHAT LOGIC ---
 btnSendChat.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
 
@@ -217,13 +225,12 @@ async function sendChatMessage() {
     });
 }
 
-// Listen for Chats
 function listenForChats() {
     const q = query(collection(db, "cozy_room_chats"), orderBy("timestamp", "asc"), limit(50));
     onSnapshot(q, (snapshot) => {
         chatMessages.innerHTML = "";
-        snapshot.forEach((doc) => {
-            const data = doc.data();
+        snapshot.forEach((docSnap) => {
+            const data = docSnap.data();
             const isMine = data.sender === MY_NAME;
             
             const bubble = document.createElement('div');
@@ -294,7 +301,7 @@ btnWater.addEventListener('click', async () => {
 btnMed.addEventListener('click', async () => {
     btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
     lblMed.innerText = "Good job! 💙";
-    triggerConfetti(); // 🎉
+    triggerConfetti();
     await updateDoc(getDocRef(), { medTaken: true });
     markActiveToday();
 });
@@ -303,7 +310,7 @@ btnSleep.addEventListener('click', async () => {
     const h = parseFloat(inpSleep.value);
     if (!h) return;
     lblSleep.innerText = "Saving...";
-    triggerConfetti(); // 🎉
+    triggerConfetti();
     await updateDoc(getDocRef(), { sleepHours: h });
     lblSleep.innerText = "Saved ✔";
     markActiveToday();
@@ -332,8 +339,8 @@ async function checkStreak() {
 function updateStreakUI(count, isTodayDone) {
     streakBadge.classList.remove('hidden');
     let title = "🔥";
-    if (count >= 30) title = "💎 Legend";
-    else if (count >= 14) title = "👑 Queen";
+    if (count >= 30) title = "💎 Hashira"; // Demon Slayer Theme!
+    else if (count >= 14) title = "⚡ Thunder";
     else if (count >= 7) title = "🌟 Star";
     else if (count >= 3) title = "✨ On Fire";
 
@@ -449,4 +456,3 @@ function sendNotification(title, body) {
         new Notification(title, { body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
     }
 }
-
