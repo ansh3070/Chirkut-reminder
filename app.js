@@ -15,15 +15,7 @@ const db = getFirestore(app);
 enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", err.code));
 
 const USER_ID = "chirkut_user_001";
-
-// --- MEMORY RESET FIX ---
-// This deletes the old names (Ansh/Harshita) so the gateway asks for Zenitsu/Nezuko
-let currentSavedName = localStorage.getItem('chirkut_username');
-if (currentSavedName === "Ansh" || currentSavedName === "Harshita") {
-    localStorage.removeItem('chirkut_username');
-    currentSavedName = null;
-}
-let MY_NAME = currentSavedName;
+let MY_NAME = localStorage.getItem('chirkut_username');
 
 // --- DATE HELPER ---
 const getTodayStr = () => {
@@ -69,7 +61,8 @@ const chatInput = document.getElementById('chat-input');
 const btnSendChat = document.getElementById('btn-send-chat');
 const chatMessages = document.getElementById('chat-messages');
 
-const sweetPopup = document.getElementById('sweet-popup');
+// Updated Popup Elements
+const sweetPopupOverlay = document.getElementById('sweet-popup-overlay');
 const popupEmoji = document.getElementById('popup-emoji');
 const popupText = document.getElementById('popup-text');
 
@@ -82,10 +75,9 @@ const affirmations = [
     "Be gentle with yourself today 💙"
 ];
 
-// --- CONFETTI ---
 function triggerConfetti() {
     if (typeof confetti === 'function') {
-        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#ffb7b2', '#8ac6d1', '#ffffff'] });
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#f6ca5c', '#ffb7b2', '#ffffff'] });
     }
 }
 
@@ -94,15 +86,13 @@ window.addEventListener('load', async () => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
     
-    // 1. Identity Check
-    if (!MY_NAME) {
+    if (!MY_NAME || (MY_NAME !== "Zenitsu" && MY_NAME !== "Nezuko")) {
         loadingScreen.style.display = 'none';
         identityModal.classList.remove('hidden');
     } else {
         await bootApp();
     }
 
-    // Identity Buttons
     idBtns.forEach(btn => {
         btn.addEventListener('click', async (e) => {
             MY_NAME = e.target.getAttribute('data-name');
@@ -118,7 +108,6 @@ async function bootApp() {
     startAffirmations();
     await loadTodayData();
     await checkStreak();
-    
     listenForBroadcasts();
     listenForGestures();
     listenForChats();
@@ -136,7 +125,7 @@ let tapCount = 0;
 secretLogo.addEventListener('click', () => {
     tapCount++;
     if (tapCount === 5) {
-        alert("A secret message for Nezuko: I see how hard you're trying, and I'm so incredibly proud of you. You've got this! 🌸");
+        alert("A secret message for you: Keep pushing forward, no matter what! 🌸⚡");
         triggerConfetti();
         tapCount = 0;
     }
@@ -157,7 +146,6 @@ function startAffirmations() {
 // --- BUG FIX: COZY MODAL BUTTON ---
 btnCozy.addEventListener('click', () => {
     modalCozy.classList.remove('hidden');
-    // Scroll chat to bottom when opened
     setTimeout(() => { chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
 });
 closeCozy.addEventListener('click', () => {
@@ -172,7 +160,6 @@ gestureBtns.forEach(btn => {
         if(type === "kiss") { emoji = "💋"; actionText = "a kiss"; }
         if(type === "nudge") { emoji = "👈"; actionText = "a nudge"; }
 
-        // Give immediate visual feedback
         btn.innerText = "Sent! ✔";
         setTimeout(() => { btn.innerText = `${emoji} ${type.charAt(0).toUpperCase() + type.slice(1)}`; }, 2000);
 
@@ -195,21 +182,23 @@ function listenForGestures() {
 
             if (data.timestamp > lastGestureTime && data.timestamp > (now - 86400000) && data.sender !== MY_NAME) {
                 
+                // SHOW BEAUTIFUL CENTERED OVERLAY
                 popupEmoji.innerText = data.emoji;
                 popupText.innerText = `${data.sender} sent ${data.text}!`;
-                sweetPopup.classList.remove('hidden');
+                sweetPopupOverlay.classList.remove('hidden');
                 
                 if (data.type === "kiss" || data.type === "hug") triggerConfetti();
-                if (Notification.permission === "granted") sendNotification(`💖 ${data.sender} sent ${data.text}!`, "Open the app to reply.");
+                if (Notification.permission === "granted") sendNotification(`🌸 ${data.sender} sent ${data.text}!`, "Open the app to reply.");
 
-                setTimeout(() => { sweetPopup.classList.add('hidden'); }, 4000);
+                // Hide after 4 seconds
+                setTimeout(() => { sweetPopupOverlay.classList.add('hidden'); }, 4000);
                 localStorage.setItem('last_gesture_time', data.timestamp);
             }
         }
     });
 }
 
-// --- CHAT LOGIC ---
+// --- THEMATIC CHAT LOGIC ---
 btnSendChat.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
 
@@ -233,15 +222,18 @@ function listenForChats() {
             const data = docSnap.data();
             const isMine = data.sender === MY_NAME;
             
+            // Determine Bubble Theme (Zenitsu = Yellow, Nezuko = Pink)
+            const themeClass = data.sender === "Zenitsu" ? "bubble-zenitsu" : "bubble-nezuko";
+            
             const bubble = document.createElement('div');
-            bubble.className = `msg-bubble ${isMine ? 'msg-mine' : 'msg-theirs'}`;
+            bubble.className = `msg-bubble ${isMine ? 'msg-mine' : 'msg-theirs'} ${themeClass}`;
             
             const time = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
             
             bubble.innerHTML = `
                 ${!isMine ? `<div class="msg-sender">${data.sender}</div>` : ''}
                 <div>${data.text}</div>
-                <div style="font-size:0.6rem; text-align:right; margin-top:3px; opacity:0.7;">${time}</div>
+                <div class="msg-time">${time}</div>
             `;
             chatMessages.appendChild(bubble);
         });
@@ -339,7 +331,7 @@ async function checkStreak() {
 function updateStreakUI(count, isTodayDone) {
     streakBadge.classList.remove('hidden');
     let title = "🔥";
-    if (count >= 30) title = "💎 Hashira"; // Demon Slayer Theme!
+    if (count >= 30) title = "💎 Hashira"; 
     else if (count >= 14) title = "⚡ Thunder";
     else if (count >= 7) title = "🌟 Star";
     else if (count >= 3) title = "✨ On Fire";
