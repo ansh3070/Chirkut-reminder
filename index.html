@@ -24,8 +24,8 @@
             <h2>Who is opening the app? 👀</h2>
             <p class="subtext" style="margin-bottom: 20px;">Select your identity to enter the safe space.</p>
             <div style="display: flex; gap: 15px;">
-                <button class="btn-action id-btn" data-name="Zenitsu" style="background-color: #f6ca5c; color: #5d5d81;">⚡ Zenitsu</button>
-                <button class="btn-action id-btn" data-name="Nezuko" style="background-color: #ffb7b2;">🌸 Nezuko</button>
+                <button class="btn-action id-btn" data-name="Zenitsu" style="background-color: #f6ca5c; color: #2a2a35;">⚡ Zenitsu</button>
+                <button class="btn-action id-btn" data-name="Nezuko" style="background-color: #ffb7b2; color: #fff;">🌸 Nezuko</button>
             </div>
         </div>
     </div>
@@ -73,8 +73,8 @@
         <footer class="bottom-controls">
             <button id="btn-install" class="btn-text highlight hidden" style="background-color: #8ac6d1; color: white;">📲 Install App</button>
             
-            <button id="btn-cozy" class="btn-text" style="background-color: #ffb7b2; color: white; border: 2px solid #ff9a93; width: 80%;">
-                💖 Our Space
+            <button id="btn-cozy" class="btn-text" style="background: linear-gradient(135deg, #f6ca5c, #ffb7b2); color: white; border: none; width: 80%; box-shadow: 0 4px 15px rgba(255, 183, 178, 0.4);">
+                🌸 Our Space ⚡
             </button>
 
             <button id="btn-history" class="btn-text" style="width: 80%;">📜 View History</button>
@@ -93,23 +93,21 @@
     </div>
 
     <div id="cozy-modal" class="modal hidden">
-        <div class="modal-content">
+        <div class="modal-content" style="background: #1a1a24; color: white;">
             <div class="modal-header" style="margin-bottom: 10px;">
-                <h2>Our Space 💖</h2>
-                <button id="close-cozy" class="close-btn">&times;</button>
+                <h2 style="color: white;">Our Space 🌸⚡</h2>
+                <button id="close-cozy" class="close-btn" style="color: white;">&times;</button>
             </div>
             
-            <p class="subtext" style="text-align:center; margin-bottom:5px;">Send a gesture instantly</p>
+            <p class="subtext" style="text-align:center; margin-bottom:5px; color: #a0a0b5;">Send a gesture instantly</p>
             <div style="display:flex; gap:10px; margin-bottom:15px;">
-                <button class="btn-action gesture-btn" data-type="hug" style="background:#8ac6d1; padding:10px; font-size:0.85rem;">🫂 Hug</button>
-                <button class="btn-action gesture-btn" data-type="kiss" style="background:#ffb7b2; padding:10px; font-size:0.85rem;">💋 Kiss</button>
-                <button class="btn-action gesture-btn" data-type="nudge" style="background:#ffd166; padding:10px; font-size:0.85rem; color:#5d5d81;">👈 Nudge</button>
+                <button class="btn-action gesture-btn" data-type="hug" style="background:#8ac6d1; padding:10px; font-size:0.85rem; color: #2a2a35;">🫂 Hug</button>
+                <button class="btn-action gesture-btn" data-type="kiss" style="background:#ffb7b2; padding:10px; font-size:0.85rem; color: #2a2a35;">💋 Kiss</button>
+                <button class="btn-action gesture-btn" data-type="nudge" style="background:#f6ca5c; padding:10px; font-size:0.85rem; color: #2a2a35;">👈 Nudge</button>
             </div>
-            
-            <hr style="border: 1px solid #f0f0f5; margin-bottom: 10px;">
             
             <div id="chat-messages" class="chat-container">
-                <p style="text-align:center; font-size:0.8rem; color:#ccc;">Loading messages...</p>
+                <p style="text-align:center; font-size:0.8rem; color:#8b8ba5;">Loading messages...</p>
             </div>
             
             <div class="chat-input-area">
@@ -119,11 +117,13 @@
         </div>
     </div>
 
-    <div id="sweet-popup" class="hidden">
-        <div class="popup-emoji" id="popup-emoji">🫂</div>
-        <p id="popup-text">A gesture arrived!</p>
+    <div id="sweet-popup-overlay" class="hidden">
+        <div class="popup-card">
+            <div class="popup-emoji" id="popup-emoji">🫂</div>
+            <p id="popup-text">A gesture arrived!</p>
+        </div>
     </div>
 
-    <script type="module" src="app.js?v=5.0"></script>
+    <script type="module" src="app.js?v=6.0"></script>
 </body>
 </html>
