@@ -1,7 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
-import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc, enableIndexedDbPersistence } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc, enableIndexedDbPersistence, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
-// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
     authDomain: "reminder-4f2f7.firebaseapp.com",
@@ -13,32 +12,32 @@ const firebaseConfig = {
 
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
-
-// Enable Offline Persistence
 enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", err.code));
 
-const USER_ID = "chirkut_user_001";
+const USER_ID = "chirkut_user_001"; // Tracker ID
+let MY_NAME = localStorage.getItem('chirkut_username'); // Identity ID
 
-// --- DATE HELPER (Manual Fix) ---
+// --- DATE HELPER ---
 const getTodayStr = () => {
     const d = new Date();
-    const year = d.getFullYear();
-    const month = String(d.getMonth() + 1).padStart(2, '0');
-    const day = String(d.getDate()).padStart(2, '0');
-    return `${year}-${month}-${day}`;
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 };
 
 const getDocRef = () => doc(db, "users", USER_ID, "dailyLogs", getTodayStr());
-
 let lastLoadedDate = getTodayStr();
 
 // --- DOM ELEMENTS ---
 const appContainer = document.getElementById('app-container');
 const loadingScreen = document.getElementById('loading-screen');
+const identityModal = document.getElementById('identity-modal');
+const idBtns = document.querySelectorAll('.id-btn');
+
 const affirmationText = document.getElementById('affirmation-text');
 const dateBadge = document.getElementById('display-date');
 const streakBadge = document.getElementById('streak-badge');
 const streakCountSpan = streakBadge.querySelector('span');
+const secretLogo = document.getElementById('secret-logo');
+
 const btnWater = document.getElementById('btn-water');
 const lblWaterCount = document.getElementById('water-count');
 const lblWaterTime = document.getElementById('water-last-time');
@@ -47,13 +46,24 @@ const lblMed = document.getElementById('med-status');
 const inpSleep = document.getElementById('sleep-input');
 const btnSleep = document.getElementById('btn-sleep');
 const lblSleep = document.getElementById('sleep-status');
+
 const btnHistory = document.getElementById('btn-history');
 const modalHistory = document.getElementById('history-modal');
 const closeHistory = document.getElementById('close-history');
 const historyList = document.getElementById('history-list');
-const btnTestNotif = document.getElementById('btn-test-notif');
-const btnInstall = document.getElementById('btn-install');
-const btnCalendar = document.getElementById('btn-calendar');
+
+// Cozy DOM
+const btnCozy = document.getElementById('btn-cozy');
+const modalCozy = document.getElementById('cozy-modal');
+const closeCozy = document.getElementById('close-cozy');
+const gestureBtns = document.querySelectorAll('.gesture-btn');
+const chatInput = document.getElementById('chat-input');
+const btnSendChat = document.getElementById('btn-send-chat');
+const chatMessages = document.getElementById('chat-messages');
+
+const sweetPopup = document.getElementById('sweet-popup');
+const popupEmoji = document.getElementById('popup-emoji');
+const popupText = document.getElementById('popup-text');
 
 const affirmations = [
     "Your brain needs water to think clearly. Sip sip! 💧",
@@ -64,23 +74,64 @@ const affirmations = [
     "Be gentle with yourself today 💙"
 ];
 
+// --- CONFETTI ---
+function triggerConfetti() {
+    if (typeof confetti === 'function') {
+        confetti({ particleCount: 100, spread: 70, origin: { y: 0.6 }, colors: ['#ffb7b2', '#8ac6d1', '#ffffff'] });
+    }
+}
+
 // --- INIT ---
 window.addEventListener('load', async () => {
     if ('serviceWorker' in navigator) navigator.serviceWorker.register('./sw.js');
-
     dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-    startAffirmations();
+    
+    // 1. Identity Check
+    if (!MY_NAME) {
+        loadingScreen.style.display = 'none';
+        identityModal.classList.remove('hidden');
+    } else {
+        await bootApp();
+    }
 
+    // Identity Buttons
+    idBtns.forEach(btn => {
+        btn.addEventListener('click', async (e) => {
+            MY_NAME = e.target.getAttribute('data-name');
+            localStorage.setItem('chirkut_username', MY_NAME);
+            identityModal.classList.add('hidden');
+            loadingScreen.style.display = 'flex';
+            await bootApp();
+        });
+    });
+});
+
+async function bootApp() {
+    startAffirmations();
     await loadTodayData();
     await checkStreak();
+    
+    listenForBroadcasts();
+    listenForGestures();
+    listenForChats();
 
     setTimeout(() => {
         loadingScreen.style.display = 'none';
         appContainer.classList.remove('hidden');
-    }, 1500);
+    }, 1000);
 
-    // Check every minute
     setInterval(backgroundLoop, 60000);
+}
+
+// --- FUN: SECRET LOGO ---
+let tapCount = 0;
+secretLogo.addEventListener('click', () => {
+    tapCount++;
+    if (tapCount === 5) {
+        alert("A secret message for you: I see how hard you're trying, and I'm so incredibly proud of you. You've got this! 💙");
+        triggerConfetti();
+        tapCount = 0;
+    }
 });
 
 function startAffirmations() {
@@ -95,25 +146,116 @@ function startAffirmations() {
     }, 15000);
 }
 
-// --- DATA LOGIC ---
+// --- COZY: GESTURES & CHAT LOGIC ---
+btnCozy.addEventListener('click', () => {
+    modalCozy.classList.remove('hidden');
+    setTimeout(() => { chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
+});
+closeCozy.addEventListener('click', () => modalCozy.classList.add('hidden'));
+
+// Send Gesture
+gestureBtns.forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+        const type = e.target.getAttribute('data-type');
+        let emoji = "🫂"; let actionText = "a hug";
+        if(type === "kiss") { emoji = "💋"; actionText = "a kiss"; }
+        if(type === "nudge") { emoji = "👈"; actionText = "a nudge"; }
+
+        // Give immediate visual feedback
+        btn.innerText = "Sent! ✔";
+        setTimeout(() => { btn.innerText = `${emoji} ${type.charAt(0).toUpperCase() + type.slice(1)}`; }, 2000);
+
+        await setDoc(doc(db, "cozy_room", "latest_gesture"), {
+            sender: MY_NAME,
+            type: type,
+            emoji: emoji,
+            text: actionText,
+            timestamp: Date.now()
+        });
+    });
+});
+
+// Listen for Gestures
+function listenForGestures() {
+    onSnapshot(doc(db, "cozy_room", "latest_gesture"), (docSnap) => {
+        if (docSnap.exists()) {
+            const data = docSnap.data();
+            const lastGestureTime = parseInt(localStorage.getItem('last_gesture_time')) || 0;
+            const now = Date.now();
+
+            // If it's a NEW gesture, sent in the last 24hrs, AND NOT sent by me
+            if (data.timestamp > lastGestureTime && data.timestamp > (now - 86400000) && data.sender !== MY_NAME) {
+                
+                // Show Sweet Popup
+                popupEmoji.innerText = data.emoji;
+                popupText.innerText = `${data.sender} sent ${data.text}!`;
+                sweetPopup.classList.remove('hidden');
+                
+                if (data.type === "kiss" || data.type === "hug") triggerConfetti();
+                if (Notification.permission === "granted") sendNotification(`💖 ${data.sender} sent ${data.text}!`, "Open the app to reply.");
+
+                setTimeout(() => { sweetPopup.classList.add('hidden'); }, 4000);
+                localStorage.setItem('last_gesture_time', data.timestamp);
+            }
+        }
+    });
+}
+
+// Send Chat
+btnSendChat.addEventListener('click', sendChatMessage);
+chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
+
+async function sendChatMessage() {
+    const text = chatInput.value.trim();
+    if (!text) return;
+    
+    chatInput.value = "";
+    await addDoc(collection(db, "cozy_room_chats"), {
+        sender: MY_NAME,
+        text: text,
+        timestamp: Date.now()
+    });
+}
+
+// Listen for Chats
+function listenForChats() {
+    const q = query(collection(db, "cozy_room_chats"), orderBy("timestamp", "asc"), limit(50));
+    onSnapshot(q, (snapshot) => {
+        chatMessages.innerHTML = "";
+        snapshot.forEach((doc) => {
+            const data = doc.data();
+            const isMine = data.sender === MY_NAME;
+            
+            const bubble = document.createElement('div');
+            bubble.className = `msg-bubble ${isMine ? 'msg-mine' : 'msg-theirs'}`;
+            
+            const time = new Date(data.timestamp).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+            
+            bubble.innerHTML = `
+                ${!isMine ? `<div class="msg-sender">${data.sender}</div>` : ''}
+                <div>${data.text}</div>
+                <div style="font-size:0.6rem; text-align:right; margin-top:3px; opacity:0.7;">${time}</div>
+            `;
+            chatMessages.appendChild(bubble);
+        });
+        chatMessages.scrollTop = chatMessages.scrollHeight;
+    });
+}
+
+// --- TRACKER DATA LOGIC ---
 async function loadTodayData() {
     try {
         const snap = await getDoc(getDocRef());
         if (snap.exists()) {
             updateUI(snap.data());
         } else {
-            const initialData = {
-                waterCount: 0, lastWaterTime: null, medTaken: false, sleepHours: 0,
-                date: getTodayStr(), timestamp: Date.now(),
-                notifsSent: { med: false, sleep: false }
-            };
+            const initialData = { waterCount: 0, lastWaterTime: null, medTaken: false, sleepHours: 0, date: getTodayStr(), timestamp: Date.now(), notifsSent: { med: false, sleep: false } };
             await setDoc(getDocRef(), initialData);
             updateUI(initialData);
         }
         lastLoadedDate = getTodayStr();
     } catch (e) {
-        console.error(e);
-        affirmationText.innerText = "Offline Mode (Saved Locally)";
+        affirmationText.innerText = "Offline Mode";
     }
 }
 
@@ -122,9 +264,7 @@ function updateUI(data) {
     if (data.lastWaterTime) {
         const d = new Date(data.lastWaterTime);
         lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
-    } else {
-        lblWaterTime.innerText = "No water yet";
-    }
+    } else lblWaterTime.innerText = "No water yet";
 
     if (data.medTaken) {
         btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
@@ -135,23 +275,17 @@ function updateUI(data) {
     }
 
     if (data.sleepHours) {
-        inpSleep.value = data.sleepHours;
-        lblSleep.innerText = "Saved ✔";
+        inpSleep.value = data.sleepHours; lblSleep.innerText = "Saved ✔";
     } else {
-        inpSleep.value = "";
-        lblSleep.innerText = "Log hours";
+        inpSleep.value = ""; lblSleep.innerText = "Log hours";
     }
 }
 
-// --- BUTTONS ---
 btnWater.addEventListener('click', async () => {
     const now = Date.now();
-    let count = parseInt(lblWaterCount.innerText) || 0;
-    count++;
+    let count = parseInt(lblWaterCount.innerText) || 0; count++;
     lblWaterCount.innerText = `${count} cups`;
-    
     await updateDoc(getDocRef(), { waterCount: count, lastWaterTime: now });
-    
     const d = new Date(now);
     lblWaterTime.innerText = `Last: ${d.getHours()}:${d.getMinutes().toString().padStart(2, '0')}`;
     markActiveToday(); 
@@ -160,6 +294,7 @@ btnWater.addEventListener('click', async () => {
 btnMed.addEventListener('click', async () => {
     btnMed.innerText = "Taken ✔"; btnMed.classList.add('taken'); btnMed.disabled = true;
     lblMed.innerText = "Good job! 💙";
+    triggerConfetti(); // 🎉
     await updateDoc(getDocRef(), { medTaken: true });
     markActiveToday();
 });
@@ -168,49 +303,44 @@ btnSleep.addEventListener('click', async () => {
     const h = parseFloat(inpSleep.value);
     if (!h) return;
     lblSleep.innerText = "Saving...";
+    triggerConfetti(); // 🎉
     await updateDoc(getDocRef(), { sleepHours: h });
     lblSleep.innerText = "Saved ✔";
     markActiveToday();
 });
 
-// --- STREAK ---
+// --- STREAK LOGIC ---
 async function checkStreak() {
     const userDocRef = doc(db, "users", USER_ID);
     const snap = await getDoc(userDocRef);
     const today = getTodayStr();
-    let streak = 0;
-    let lastActive = null;
+    let streak = 0; let lastActive = null;
 
-    if (snap.exists()) {
-        const d = snap.data();
-        streak = d.streak || 0;
-        lastActive = d.lastActiveDate;
-    }
+    if (snap.exists()) { const d = snap.data(); streak = d.streak || 0; lastActive = d.lastActiveDate; }
 
-    const y = new Date();
-    y.setDate(y.getDate() - 1);
-    const yesterdayStr = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
+    const y = new Date(); y.setDate(y.getDate() - 1);
+    const yStr = `${y.getFullYear()}-${String(y.getMonth()+1).padStart(2,'0')}-${String(y.getDate()).padStart(2,'0')}`;
 
     if (lastActive === today) updateStreakUI(streak, true);
-    else if (lastActive === yesterdayStr) updateStreakUI(streak, false);
+    else if (lastActive === yStr) updateStreakUI(streak, false);
     else {
-        if (streak > 0) {
-            streak = 0;
-            await updateDoc(userDocRef, { streak: 0 });
-        }
+        if (streak > 0) { streak = 0; await updateDoc(userDocRef, { streak: 0 }); }
         updateStreakUI(0, false);
     }
 }
 
 function updateStreakUI(count, isTodayDone) {
     streakBadge.classList.remove('hidden');
-    streakCountSpan.innerText = count;
+    let title = "🔥";
+    if (count >= 30) title = "💎 Legend";
+    else if (count >= 14) title = "👑 Queen";
+    else if (count >= 7) title = "🌟 Star";
+    else if (count >= 3) title = "✨ On Fire";
+
     if (isTodayDone) {
-        streakBadge.classList.add('active');
-        streakBadge.innerHTML = `🔥 ${count} (Day Saved!)`;
+        streakBadge.classList.add('active'); streakBadge.innerHTML = `${title} ${count} (Saved!)`;
     } else {
-        streakBadge.classList.remove('active');
-        streakBadge.innerHTML = `🔥 ${count}`;
+        streakBadge.classList.remove('active'); streakBadge.innerHTML = `${title} ${count}`;
     }
 }
 
@@ -218,14 +348,9 @@ async function markActiveToday() {
     const userDocRef = doc(db, "users", USER_ID);
     const snap = await getDoc(userDocRef);
     const today = getTodayStr();
-    let currentStreak = 0;
-    let lastActive = "";
+    let currentStreak = 0; let lastActive = "";
 
-    if (snap.exists()) {
-        const d = snap.data();
-        currentStreak = d.streak || 0;
-        lastActive = d.lastActiveDate;
-    }
+    if (snap.exists()) { const d = snap.data(); currentStreak = d.streak || 0; lastActive = d.lastActiveDate; }
 
     if (lastActive !== today) {
         const newStreak = currentStreak + 1;
@@ -235,45 +360,26 @@ async function markActiveToday() {
     }
 }
 
-// --- HISTORY ---
-btnHistory.addEventListener('click', async () => {
-    modalHistory.classList.remove('hidden');
-    await renderHistoryList();
-});
-
-closeHistory.addEventListener('click', () => {
-    modalHistory.classList.add('hidden');
-});
+// --- HISTORY LOGIC ---
+btnHistory.addEventListener('click', async () => { modalHistory.classList.remove('hidden'); await renderHistoryList(); });
+closeHistory.addEventListener('click', () => modalHistory.classList.add('hidden'));
 
 async function renderHistoryList() {
     historyList.innerHTML = '<p style="text-align:center;">Loading...</p>';
     try {
-        const historyRef = collection(db, "users", USER_ID, "dailyLogs");
-        const q = query(historyRef, orderBy("date", "desc"), limit(10));
+        const q = query(collection(db, "users", USER_ID, "dailyLogs"), orderBy("date", "desc"), limit(10));
         const snaps = await getDocs(q);
-
         historyList.innerHTML = "";
-        if (snaps.empty) {
-            historyList.innerHTML = "<p style='text-align:center;'>No history yet.</p>";
-            return;
-        }
-
+        if (snaps.empty) { historyList.innerHTML = "<p style='text-align:center;'>No history yet.</p>"; return; }
         snaps.forEach((docSnap) => {
             const d = docSnap.data();
             const dateNice = new Date(d.date).toLocaleDateString('en-US', { weekday: 'short', day: 'numeric' });
-            
-            const div = document.createElement('div');
-            div.className = 'history-item';
-            div.innerHTML = `
-                <div class="h-info"><span class="h-date">${dateNice}</span><span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span></div>
-                <button class="btn-delete" style="border:none; background:none; font-size:1.2rem;">🗑️</button>
-            `;
+            const div = document.createElement('div'); div.className = 'history-item';
+            div.innerHTML = `<div class="h-info"><span class="h-date">${dateNice}</span><span class="h-stats">💧 ${d.waterCount || 0} | 😴 ${d.sleepHours || 0}h</span></div><button class="btn-delete" style="border:none; background:none; font-size:1.2rem;">🗑️</button>`;
             div.querySelector('.btn-delete').addEventListener('click', () => deleteEntry(d.date));
             historyList.appendChild(div);
         });
-    } catch (error) {
-        console.error("History Error:", error);
-    }
+    } catch (e) { console.error(e); }
 }
 
 async function deleteEntry(dateStr) {
@@ -282,66 +388,45 @@ async function deleteEntry(dateStr) {
     await renderHistoryList(); 
 }
 
-// --- BACKGROUND CHECK (The "Brain") ---
-async function backgroundLoop() {
-    const currentDay = getTodayStr();
-    
-    // 1. Midnight Reset Check
-    if (currentDay !== lastLoadedDate) {
-        console.log("Midnight! Refreshing...");
-        dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
-        await loadTodayData(); 
-        return; 
-    }
-
-    // 2. CHECK FOR ADMIN BROADCASTS
-    try {
-        const broadcastRef = doc(db, "broadcasts", "latest");
-        const broadcastSnap = await getDoc(broadcastRef);
-
-        if (broadcastSnap.exists()) {
-            const msg = broadcastSnap.data();
+// --- BACKGROUND TASKS & ADMIN BROADCASTS ---
+function listenForBroadcasts() {
+    onSnapshot(doc(db, "broadcasts", "latest"), (docSnap) => {
+        if (docSnap.exists()) {
+            const msg = docSnap.data();
             const lastMsgTime = parseInt(localStorage.getItem('last_broadcast_id')) || 0;
             const now = Date.now();
-
             if (msg.timestamp > lastMsgTime && msg.timestamp > (now - 86400000)) {
                 if (Notification.permission === "granted") sendNotification(msg.title, msg.body);
+                affirmationText.innerText = `📢 ${msg.title}: ${msg.body}`;
+                setTimeout(() => startAffirmations(), 15000);
                 localStorage.setItem('last_broadcast_id', msg.timestamp);
             }
         }
-    } catch (e) { /* Ignore offline errors */ }
+    });
+}
 
-    // 3. PERSONAL REMINDERS
+async function backgroundLoop() {
+    const currentDay = getTodayStr();
+    if (currentDay !== lastLoadedDate) {
+        dateBadge.innerText = new Date().toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+        await loadTodayData(); return; 
+    }
+
     if (Notification.permission !== "granted") return;
     const snap = await getDoc(getDocRef());
     if (!snap.exists()) return;
     
-    const data = snap.data();
-    const now = Date.now();
-    const currentHour = new Date().getHours();
+    const data = snap.data(); const now = Date.now(); const currentHour = new Date().getHours();
+    if (currentHour >= 0 && currentHour < 6) return; // Quiet hours
 
-    // --- QUIET HOURS GUARD (12 AM - 6 AM) ---
-    // If it is midnight (0), 1 AM, 2 AM, 3 AM, 4 AM, 5 AM... DO NOTHING.
-    if (currentHour >= 0 && currentHour < 6) {
-        return; // STOP HERE. Don't check water, meds, or sleep.
-    }
-
-    // --- WATER LOGIC (Fixed for "First Sip") ---
-    // Rule 1: Normal Reminder (Gap > 2 hours)
     if (data.lastWaterTime && (now - data.lastWaterTime > 7200000)) {
         sendNotification("Kiddo, have some water! 💧", "Hydrate now!");
         await updateDoc(getDocRef(), { lastWaterTime: now }); 
-    }
-    // Rule 2: First Sip Check (If 0 cups & it's past 9 AM)
-    // This catches the case where 'lastWaterTime' is null
-    else if (data.waterCount === 0 && currentHour >= 9) {
-        // Only send if we haven't bugged them recently (using a temp lastWaterTime for today)
-        // If lastWaterTime is null, set it to 'now' so we remind them, but don't spam instantly again
+    } else if (data.waterCount === 0 && currentHour >= 9) {
         sendNotification("Good morning! ☀️", "Start your day with a glass of water 💧");
         await updateDoc(getDocRef(), { lastWaterTime: now }); 
     }
     
-    // --- MEDS LOGIC ---
     if (currentHour === 22 && !data.medTaken) {
         if (!data.notifsSent || !data.notifsSent.med) {
             sendNotification("Medicine Reminder 💊", "Please take your meds now!");
@@ -349,7 +434,6 @@ async function backgroundLoop() {
         }
     }
     
-    // --- SLEEP LOGIC ---
     if (currentHour === 23 && !data.sleepHours) {
         if (!data.notifsSent || !data.notifsSent.sleep) {
             sendNotification("Go to sleep, kiddo 😴", "It's late.");
@@ -365,38 +449,4 @@ function sendNotification(title, body) {
         new Notification(title, { body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
     }
 }
-
-if (btnCalendar) {
-    btnCalendar.addEventListener('click', () => {
-        const medLink = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Medicine+Reminder+💊&details=Time+for+self-care!&dates=20240201T220000/20240201T221500&recur=RRULE:FREQ=DAILY";
-        const sleepLink = "https://calendar.google.com/calendar/render?action=TEMPLATE&text=Go+to+Sleep+😴&details=Put+the+phone+away.&dates=20240201T230000/20240201T233000&recur=RRULE:FREQ=DAILY";
-
-        if(confirm("Open Google Calendar to set permanent alarms?")) {
-            window.open(medLink, '_blank');
-            setTimeout(() => { if(confirm("Add Sleep Reminder too?")) window.open(sleepLink, '_blank'); }, 1000);
-        }
-    });
-}
-
-btnTestNotif.addEventListener('click', () => {
-    if (Notification.permission !== "granted") Notification.requestPermission();
-    sendNotification("Chirkut Test 🔔", "This is how I will remind you!");
-});
-
-let deferredPrompt;
-window.addEventListener('beforeinstallprompt', (e) => {
-    e.preventDefault();
-    deferredPrompt = e;
-    btnInstall.classList.remove('hidden');
-});
-btnInstall.addEventListener('click', async () => {
-    if (!deferredPrompt) return;
-    deferredPrompt.prompt();
-    const { outcome } = await deferredPrompt.userChoice;
-    deferredPrompt = null;
-    btnInstall.classList.add('hidden');
-});
-window.addEventListener('appinstalled', () => {
-    btnInstall.classList.add('hidden');
-});
 
