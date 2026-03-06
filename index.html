@@ -8,6 +8,7 @@
     <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800&display=swap" rel="stylesheet">
     <meta name="theme-color" content="#fff0f3">
     <link rel="manifest" href="manifest.json">
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
 </head>
 <body>
 
@@ -18,14 +19,23 @@
         </div>
     </div>
 
+    <div id="identity-modal" class="modal hidden" style="z-index: 3000; align-items: center; justify-content: center;">
+        <div class="modal-content" style="height: auto; padding: 30px; border-radius: 30px; text-align: center;">
+            <h2>Who is opening the app? 👀</h2>
+            <p class="subtext" style="margin-bottom: 20px;">Select your identity to enter the safe space.</p>
+            <div style="display: flex; gap: 15px;">
+                <button class="btn-action id-btn" data-name="Ansh" style="background-color: #8ac6d1;">👦🏽 Ansh</button>
+                <button class="btn-action id-btn" data-name="Harshita" style="background-color: #ffb7b2;">👧🏽 Harshita</button>
+            </div>
+        </div>
+    </div>
+
     <div id="app-container" class="hidden">
         
         <nav class="navbar">
             <div style="display:flex; align-items:center; gap:10px;">
-                <span class="logo">Chirkut</span>
-                <div id="streak-badge" class="streak-pill hidden">
-                    🔥 <span>0</span>
-                </div>
+                <span class="logo" id="secret-logo" style="cursor:pointer;">Chirkut</span>
+                <div id="streak-badge" class="streak-pill hidden">🔥 <span>0</span></div>
             </div>
             <span class="date-badge" id="display-date">Today</span>
         </nav>
@@ -35,30 +45,22 @@
         </div>
 
         <main class="dashboard-grid">
-            
             <div class="card water-card">
-                <div class="card-header">
-                    <span class="emoji">💧</span>
-                    <span class="stat" id="water-count">0 cups</span>
-                </div>
+                <div class="card-header"><span class="emoji">💧</span><span class="stat" id="water-count">0 cups</span></div>
                 <h3>Hydration</h3>
                 <p class="subtext" id="water-last-time">No water yet</p>
                 <button id="btn-water" class="btn-action water-btn">I drank water</button>
             </div>
 
             <div class="card med-card">
-                <div class="card-header">
-                    <span class="emoji">💊</span>
-                </div>
+                <div class="card-header"><span class="emoji">💊</span></div>
                 <h3>Meds</h3>
                 <p class="subtext" id="med-status">Not taken</p>
                 <button id="btn-med" class="btn-action med-btn">Mark Taken</button>
             </div>
 
             <div class="card sleep-card">
-                <div class="card-header">
-                    <span class="emoji">😴</span>
-                </div>
+                <div class="card-header"><span class="emoji">😴</span></div>
                 <h3>Sleep</h3>
                 <div class="sleep-input-wrapper">
                     <input type="number" id="sleep-input" placeholder="Hrs" step="0.5">
@@ -66,22 +68,18 @@
                 </div>
                 <p class="subtext" id="sleep-status">Log hours</p>
             </div>
-
         </main>
 
         <footer class="bottom-controls">
-            <button id="btn-install" class="btn-text highlight hidden" style="background-color: #8ac6d1; color: white;">
-                📲 Install App
+            <button id="btn-install" class="btn-text highlight hidden" style="background-color: #8ac6d1; color: white;">📲 Install App</button>
+            
+            <button id="btn-cozy" class="btn-text" style="background-color: #ffb7b2; color: white; border: 2px solid #ff9a93; width: 80%;">
+                💖 Our Space
             </button>
 
-            <a href="https://v0-stoppanic.vercel.app/" target="_blank" class="btn-text panic-btn">
-                🆘 Panic Help
-            </a>
-
-            <button id="btn-history" class="btn-text">📜 View History</button>
-            <button id="btn-test-notif" class="btn-text-sub">🔔 Test Notify</button>
+            <button id="btn-history" class="btn-text" style="width: 80%;">📜 View History</button>
+            <a href="https://v0-stoppanic.vercel.app/" target="_blank" class="btn-text panic-btn">🆘 Panic Help</a>
         </footer>
-
     </div>
 
     <div id="history-modal" class="modal hidden">
@@ -94,6 +92,38 @@
         </div>
     </div>
 
-    <script type="module" src="app.js"></script>
+    <div id="cozy-modal" class="modal hidden">
+        <div class="modal-content">
+            <div class="modal-header" style="margin-bottom: 10px;">
+                <h2>Our Space 💖</h2>
+                <button id="close-cozy" class="close-btn">&times;</button>
+            </div>
+            
+            <p class="subtext" style="text-align:center; margin-bottom:5px;">Send a gesture instantly</p>
+            <div style="display:flex; gap:10px; margin-bottom:15px;">
+                <button class="btn-action gesture-btn" data-type="hug" style="background:#8ac6d1; padding:10px; font-size:0.85rem;">🫂 Hug</button>
+                <button class="btn-action gesture-btn" data-type="kiss" style="background:#ffb7b2; padding:10px; font-size:0.85rem;">💋 Kiss</button>
+                <button class="btn-action gesture-btn" data-type="nudge" style="background:#ffd166; padding:10px; font-size:0.85rem; color:#5d5d81;">👈 Nudge</button>
+            </div>
+            
+            <hr style="border: 1px solid #f0f0f5; margin-bottom: 10px;">
+            
+            <div id="chat-messages" class="chat-container">
+                <p style="text-align:center; font-size:0.8rem; color:#ccc;">Loading messages...</p>
+            </div>
+            
+            <div class="chat-input-area">
+                <input type="text" id="chat-input" placeholder="Type a message...">
+                <button id="btn-send-chat">💌</button>
+            </div>
+        </div>
+    </div>
+
+    <div id="sweet-popup" class="hidden">
+        <div class="popup-emoji" id="popup-emoji">🫂</div>
+        <p id="popup-text">Ansh sent a hug!</p>
+    </div>
+
+    <script type="module" src="app.js?v=4.0"></script>
 </body>
 </html>
