@@ -18,18 +18,30 @@ enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", er
 const USER_ID = "chirkut_user_001";
 let MY_NAME = localStorage.getItem('chirkut_username');
 
-// --- TELEGRAM BOT SETTINGS ---
+// --- ⚡ SMART TELEGRAM BOT SETTINGS 🌸 ---
 const TELEGRAM_TOKEN = "8770391737:AAFPpD5sMIwWwPMPc_asHXKp-ew_uKDrRPg";
-const TARGET_CHAT_ID = "8063573555"; // 🌸 Harshita's ID!
+const ANSH_ID = "6100871448";
+const HARSHITA_ID = "8063573555";
 
-// Fire-and-forget Telegram function
+// This function figures out who to send the message to!
+function getPartnerChatId() {
+    if (MY_NAME === "Zenitsu") {
+        return HARSHITA_ID; // Zenitsu sends to Nezuko
+    } else if (MY_NAME === "Nezuko") {
+        return ANSH_ID; // Nezuko sends to Zenitsu
+    }
+    return HARSHITA_ID; // Backup fallback
+}
+
+// Send the ping to the PARTNER
 function sendTelegramPing(message) {
+    const targetId = getPartnerChatId();
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
     fetch(url, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-            chat_id: TARGET_CHAT_ID,
+            chat_id: targetId,
             text: message
         })
     }).catch(err => console.error("Telegram ping failed", err));
@@ -181,10 +193,10 @@ gestureBtns.forEach(btn => {
         btn.innerText = "Sent! ✔";
         setTimeout(() => { btn.innerText = `${emoji} ${type.charAt(0).toUpperCase() + type.slice(1)}`; }, 2000);
 
-        // 🚀 1. PING TELEGRAM INSTANTLY (Doesn't wait for anything)
+        // 🚀 PING THE OTHER PERSON ON TELEGRAM INSTANTLY
         sendTelegramPing(`${emoji} ${MY_NAME} sent ${actionText}!\n\nOpen Our Space to reply 🌸⚡`);
 
-        // 2. Save to Firebase
+        // Save to Firebase
         await setDoc(doc(db, "cozy_room", "latest_gesture"), {
             sender: MY_NAME,
             type: type,
@@ -230,10 +242,10 @@ async function sendChatMessage() {
     
     chatInput.value = "";
     
-    // 🚀 1. PING TELEGRAM INSTANTLY
+    // 🚀 PING THE OTHER PERSON ON TELEGRAM INSTANTLY
     sendTelegramPing(`💬 New message from ${MY_NAME}:\n"${text}"`);
     
-    // 2. Save to Firebase
+    // Save to Firebase
     await addDoc(collection(db, "cozy_room_chats"), {
         sender: MY_NAME,
         text: text,
@@ -492,4 +504,3 @@ function sendNotification(title, body) {
         new Notification(title, { body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
     }
 }
-
