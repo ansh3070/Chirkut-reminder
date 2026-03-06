@@ -1,6 +1,7 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-app.js";
 import { getFirestore, doc, setDoc, getDoc, updateDoc, collection, query, limit, orderBy, getDocs, deleteDoc, enableIndexedDbPersistence, onSnapshot, addDoc } from "https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore.js";
 
+// --- FIREBASE CONFIG ---
 const firebaseConfig = {
     apiKey: "AIzaSyDJotA_xL6AOHUEJS-Hr4ft5DdOiMzNDog",
     authDomain: "reminder-4f2f7.firebaseapp.com",
@@ -16,6 +17,28 @@ enableIndexedDbPersistence(db).catch(err => console.log("Persistence Error:", er
 
 const USER_ID = "chirkut_user_001";
 let MY_NAME = localStorage.getItem('chirkut_username');
+
+// --- TELEGRAM BOT SETTINGS ---
+const TELEGRAM_TOKEN = "8770391737:AAFPpD5sMIwWwPMPc_asHXKp-ew_uKDrRPg";
+// Right now, this is YOUR ID so you can test it. 
+// Once it works, you will put Harshita's ID here!
+const TARGET_CHAT_ID = "6100871448"; 
+
+async function sendTelegramPing(message) {
+    const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
+    try {
+        await fetch(url, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                chat_id: TARGET_CHAT_ID,
+                text: message
+            })
+        });
+    } catch (error) {
+        console.error("Telegram ping failed:", error);
+    }
+}
 
 // --- DATE HELPER ---
 const getTodayStr = () => {
@@ -61,7 +84,7 @@ const chatInput = document.getElementById('chat-input');
 const btnSendChat = document.getElementById('btn-send-chat');
 const chatMessages = document.getElementById('chat-messages');
 
-// Updated Popup Elements
+// Popup Elements
 const sweetPopupOverlay = document.getElementById('sweet-popup-overlay');
 const popupEmoji = document.getElementById('popup-emoji');
 const popupText = document.getElementById('popup-text');
@@ -143,7 +166,7 @@ function startAffirmations() {
     }, 15000);
 }
 
-// --- BUG FIX: COZY MODAL BUTTON ---
+// --- COZY MODAL ---
 btnCozy.addEventListener('click', () => {
     modalCozy.classList.remove('hidden');
     setTimeout(() => { chatMessages.scrollTop = chatMessages.scrollHeight; }, 100);
@@ -152,7 +175,7 @@ closeCozy.addEventListener('click', () => {
     modalCozy.classList.add('hidden');
 });
 
-// --- GESTURES LOGIC ---
+// --- GESTURES LOGIC (Firebase + Telegram) ---
 gestureBtns.forEach(btn => {
     btn.addEventListener('click', async (e) => {
         const type = e.target.getAttribute('data-type');
@@ -163,6 +186,7 @@ gestureBtns.forEach(btn => {
         btn.innerText = "Sent! ✔";
         setTimeout(() => { btn.innerText = `${emoji} ${type.charAt(0).toUpperCase() + type.slice(1)}`; }, 2000);
 
+        // 1. Save to Firebase
         await setDoc(doc(db, "cozy_room", "latest_gesture"), {
             sender: MY_NAME,
             type: type,
@@ -170,6 +194,9 @@ gestureBtns.forEach(btn => {
             text: actionText,
             timestamp: Date.now()
         });
+
+        // 2. Ping Telegram Instantly
+        sendTelegramPing(`${emoji} ${MY_NAME} sent ${actionText}!\n\nOpen Our Space to reply 🌸⚡`);
     });
 });
 
@@ -182,15 +209,18 @@ function listenForGestures() {
 
             if (data.timestamp > lastGestureTime && data.timestamp > (now - 86400000) && data.sender !== MY_NAME) {
                 
-                // SHOW BEAUTIFUL CENTERED OVERLAY
+                // Show the Beautiful Centered Web Popup
                 popupEmoji.innerText = data.emoji;
                 popupText.innerText = `${data.sender} sent ${data.text}!`;
                 sweetPopupOverlay.classList.remove('hidden');
                 
                 if (data.type === "kiss" || data.type === "hug") triggerConfetti();
-                if (Notification.permission === "granted") sendNotification(`🌸 ${data.sender} sent ${data.text}!`, "Open the app to reply.");
+                
+                // Show standard Web Push Notification
+                if (Notification.permission === "granted") {
+                    sendNotification(`🌸 ${data.sender} sent ${data.text}!`, "Open the app to reply.");
+                }
 
-                // Hide after 4 seconds
                 setTimeout(() => { sweetPopupOverlay.classList.add('hidden'); }, 4000);
                 localStorage.setItem('last_gesture_time', data.timestamp);
             }
@@ -198,7 +228,7 @@ function listenForGestures() {
     });
 }
 
-// --- THEMATIC CHAT LOGIC ---
+// --- CHAT LOGIC (Firebase + Telegram) ---
 btnSendChat.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
 
@@ -207,22 +237,30 @@ async function sendChatMessage() {
     if (!text) return;
     
     chatInput.value = "";
+    
+    // 1. Save to Firebase
     await addDoc(collection(db, "cozy_room_chats"), {
         sender: MY_NAME,
         text: text,
         timestamp: Date.now()
     });
+
+    // 2. Ping Telegram Instantly
+    sendTelegramPing(`💬 New message from ${MY_NAME}:\n"${text}"`);
 }
 
 function listenForChats() {
     const q = query(collection(db, "cozy_room_chats"), orderBy("timestamp", "asc"), limit(50));
+    
     onSnapshot(q, (snapshot) => {
         chatMessages.innerHTML = "";
+        
+        let lastChatTime = parseInt(localStorage.getItem('last_chat_time')) || Date.now();
+        let newestTime = lastChatTime;
+
         snapshot.forEach((docSnap) => {
             const data = docSnap.data();
             const isMine = data.sender === MY_NAME;
-            
-            // Determine Bubble Theme (Zenitsu = Yellow, Nezuko = Pink)
             const themeClass = data.sender === "Zenitsu" ? "bubble-zenitsu" : "bubble-nezuko";
             
             const bubble = document.createElement('div');
@@ -236,7 +274,22 @@ function listenForChats() {
                 <div class="msg-time">${time}</div>
             `;
             chatMessages.appendChild(bubble);
+
+            // --- WEB NOTIFICATION LOGIC ---
+            if (!isMine && data.timestamp > lastChatTime) {
+                if (data.timestamp > (Date.now() - 120000)) {
+                    if (Notification.permission === "granted") {
+                        sendNotification(`💬 ${data.sender} says:`, data.text);
+                    }
+                }
+                newestTime = data.timestamp; 
+            }
         });
+        
+        if (newestTime > lastChatTime) {
+            localStorage.setItem('last_chat_time', newestTime);
+        }
+        
         chatMessages.scrollTop = chatMessages.scrollHeight;
     });
 }
