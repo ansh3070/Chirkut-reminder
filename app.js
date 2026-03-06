@@ -20,24 +20,19 @@ let MY_NAME = localStorage.getItem('chirkut_username');
 
 // --- TELEGRAM BOT SETTINGS ---
 const TELEGRAM_TOKEN = "8770391737:AAFPpD5sMIwWwPMPc_asHXKp-ew_uKDrRPg";
-// Right now, this is YOUR ID so you can test it. 
-// Once it works, you will put Harshita's ID here!
-const TARGET_CHAT_ID = "6100871448"; 
+const TARGET_CHAT_ID = "6100871448"; // YOUR ID is here for testing!
 
-async function sendTelegramPing(message) {
+// Fire-and-forget Telegram function
+function sendTelegramPing(message) {
     const url = `https://api.telegram.org/bot${TELEGRAM_TOKEN}/sendMessage`;
-    try {
-        await fetch(url, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-                chat_id: TARGET_CHAT_ID,
-                text: message
-            })
-        });
-    } catch (error) {
-        console.error("Telegram ping failed:", error);
-    }
+    fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+            chat_id: TARGET_CHAT_ID,
+            text: message
+        })
+    }).catch(err => console.error("Telegram ping failed", err));
 }
 
 // --- DATE HELPER ---
@@ -175,7 +170,7 @@ closeCozy.addEventListener('click', () => {
     modalCozy.classList.add('hidden');
 });
 
-// --- GESTURES LOGIC (Firebase + Telegram) ---
+// --- GESTURES LOGIC (Telegram First, Then Firebase) ---
 gestureBtns.forEach(btn => {
     btn.addEventListener('click', async (e) => {
         const type = e.target.getAttribute('data-type');
@@ -186,7 +181,10 @@ gestureBtns.forEach(btn => {
         btn.innerText = "Sent! ✔";
         setTimeout(() => { btn.innerText = `${emoji} ${type.charAt(0).toUpperCase() + type.slice(1)}`; }, 2000);
 
-        // 1. Save to Firebase
+        // 🚀 1. PING TELEGRAM INSTANTLY (Doesn't wait for anything)
+        sendTelegramPing(`${emoji} ${MY_NAME} sent ${actionText}!\n\nOpen Our Space to reply 🌸⚡`);
+
+        // 2. Save to Firebase
         await setDoc(doc(db, "cozy_room", "latest_gesture"), {
             sender: MY_NAME,
             type: type,
@@ -194,9 +192,6 @@ gestureBtns.forEach(btn => {
             text: actionText,
             timestamp: Date.now()
         });
-
-        // 2. Ping Telegram Instantly
-        sendTelegramPing(`${emoji} ${MY_NAME} sent ${actionText}!\n\nOpen Our Space to reply 🌸⚡`);
     });
 });
 
@@ -208,15 +203,12 @@ function listenForGestures() {
             const now = Date.now();
 
             if (data.timestamp > lastGestureTime && data.timestamp > (now - 86400000) && data.sender !== MY_NAME) {
-                
-                // Show the Beautiful Centered Web Popup
                 popupEmoji.innerText = data.emoji;
                 popupText.innerText = `${data.sender} sent ${data.text}!`;
                 sweetPopupOverlay.classList.remove('hidden');
                 
                 if (data.type === "kiss" || data.type === "hug") triggerConfetti();
                 
-                // Show standard Web Push Notification
                 if (Notification.permission === "granted") {
                     sendNotification(`🌸 ${data.sender} sent ${data.text}!`, "Open the app to reply.");
                 }
@@ -228,7 +220,7 @@ function listenForGestures() {
     });
 }
 
-// --- CHAT LOGIC (Firebase + Telegram) ---
+// --- CHAT LOGIC (Telegram First, Then Firebase) ---
 btnSendChat.addEventListener('click', sendChatMessage);
 chatInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') sendChatMessage(); });
 
@@ -238,15 +230,15 @@ async function sendChatMessage() {
     
     chatInput.value = "";
     
-    // 1. Save to Firebase
+    // 🚀 1. PING TELEGRAM INSTANTLY
+    sendTelegramPing(`💬 New message from ${MY_NAME}:\n"${text}"`);
+    
+    // 2. Save to Firebase
     await addDoc(collection(db, "cozy_room_chats"), {
         sender: MY_NAME,
         text: text,
         timestamp: Date.now()
     });
-
-    // 2. Ping Telegram Instantly
-    sendTelegramPing(`💬 New message from ${MY_NAME}:\n"${text}"`);
 }
 
 function listenForChats() {
@@ -275,7 +267,6 @@ function listenForChats() {
             `;
             chatMessages.appendChild(bubble);
 
-            // --- WEB NOTIFICATION LOGIC ---
             if (!isMine && data.timestamp > lastChatTime) {
                 if (data.timestamp > (Date.now() - 120000)) {
                     if (Notification.permission === "granted") {
@@ -501,3 +492,4 @@ function sendNotification(title, body) {
         new Notification(title, { body, icon: "https://via.placeholder.com/128/8ac6d1/ffffff?text=💙" });
     }
 }
+
