@@ -20,7 +20,7 @@ let MY_NAME = localStorage.getItem('chirkut_username');
 
 // --- TELEGRAM BOT SETTINGS ---
 const TELEGRAM_TOKEN = "8770391737:AAFPpD5sMIwWwPMPc_asHXKp-ew_uKDrRPg";
-const TARGET_CHAT_ID = "6100871448"; // YOUR ID is here for testing!
+const TARGET_CHAT_ID = "8063573555"; // 🌸 Harshita's ID!
 
 // Fire-and-forget Telegram function
 function sendTelegramPing(message) {
